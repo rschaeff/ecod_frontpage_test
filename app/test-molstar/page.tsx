@@ -5,30 +5,32 @@ import { useState } from 'react';
 import StructureViewer from '@/components/StructureViewer';
 
 export default function TestMolstar() {
-  const [pdbId, setPdbId] = useState('4UBP');
+  const [pdbId, setPdbId] = useState('1enh_A');
   const [style, setStyle] = useState('cartoon');
   const [showLigands, setShowLigands] = useState(true);
   const [showWater, setShowWater] = useState(false);
-  
+  const [localBasePath, setLocalBasePath] = useState('/data/ecod/chain_data');
+  const [useLocalPath, setUseLocalPath] = useState(true);
+
   return (
     <div className="container mx-auto p-8">
       <h1 className="text-2xl font-bold mb-6">Mol* Structure Viewer Test</h1>
-      
-      <div className="mb-4 flex space-x-4">
+
+      <div className="mb-4 flex flex-wrap gap-4">
         <div>
           <label className="block text-sm font-medium mb-1">PDB ID</label>
-          <input 
-            type="text" 
-            value={pdbId} 
-            onChange={(e) => setPdbId(e.target.value.toUpperCase())} 
+          <input
+            type="text"
+            value={pdbId}
+            onChange={(e) => setPdbId(e.target.value)}
             className="border rounded px-3 py-2 w-32"
           />
         </div>
-        
+
         <div>
           <label className="block text-sm font-medium mb-1">Style</label>
-          <select 
-            value={style} 
+          <select
+            value={style}
             onChange={(e) => setStyle(e.target.value)}
             className="border rounded px-3 py-2"
           >
@@ -38,22 +40,49 @@ export default function TestMolstar() {
             <option value="spacefill">Spacefill</option>
           </select>
         </div>
-        
+
+        <div className="flex flex-col">
+          <label className="block text-sm font-medium mb-1">Use Local Repository</label>
+          <label className="flex items-center">
+            <input
+              type="checkbox"
+              checked={useLocalPath}
+              onChange={(e) => setUseLocalPath(e.target.checked)}
+              className="mr-2"
+            />
+            <span>Load from local repository</span>
+          </label>
+        </div>
+
+        {useLocalPath && (
+          <div className="w-full">
+            <label className="block text-sm font-medium mb-1">Local Base Path</label>
+            <input
+              type="text"
+              value={localBasePath}
+              onChange={(e) => setLocalBasePath(e.target.value)}
+              className="border rounded px-3 py-2 w-full max-w-lg"
+            />
+          </div>
+        )}
+      </div>
+
+      <div className="mb-4 flex space-x-4">
         <div className="flex items-end space-x-4">
           <label className="flex items-center">
-            <input 
-              type="checkbox" 
-              checked={showLigands} 
+            <input
+              type="checkbox"
+              checked={showLigands}
               onChange={(e) => setShowLigands(e.target.checked)}
               className="mr-2"
             />
             <span>Show Ligands</span>
           </label>
-          
+
           <label className="flex items-center">
-            <input 
-              type="checkbox" 
-              checked={showWater} 
+            <input
+              type="checkbox"
+              checked={showWater}
               onChange={(e) => setShowWater(e.target.checked)}
               className="mr-2"
             />
@@ -61,25 +90,33 @@ export default function TestMolstar() {
           </label>
         </div>
       </div>
-      
+
       <div className="border rounded-lg p-4 bg-white shadow-md">
         <div style={{ height: '500px' }}>
           <StructureViewer
             pdbId={pdbId}
+            localBasePath={useLocalPath ? localBasePath : undefined}
             style={style as any}
             showLigands={showLigands}
             showWater={showWater}
             highlights={[
-              { start: 159, end: 252, chainId: 'A', color: '#ff5722' }
+              { start: 15, end: 30, chainId: 'A', color: '#ff5722' }
             ]}
             onLoaded={() => console.log('Structure loaded')}
             onError={(err) => console.error('Error:', err)}
           />
         </div>
       </div>
-      
+
       <div className="mt-4 text-sm text-gray-500">
-        Try different PDB IDs: 4UBP, 1UBQ, 1CRN, 3PQR, etc.
+        <p>Local structure examples:</p>
+        <ul className="list-disc list-inside">
+          <li>1enh_A (Engrailed homeodomain)</li>
+          <li>1ubq_A (Ubiquitin)</li>
+          <li>1crn_A (Crambin)</li>
+          <li>4ubp_A (Ubiquitin-like protein)</li>
+        </ul>
+        <p className="mt-2">Format: [pdbid]_[chain]</p>
       </div>
     </div>
   );

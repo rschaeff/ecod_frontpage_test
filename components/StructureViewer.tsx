@@ -21,6 +21,7 @@ import { Script } from 'molstar/lib/mol-script/script';
 interface StructureViewerProps {
   pdbId?: string;
   url?: string;
+  localBasePath?: string; // New prop for local repository base path
   style?: 'cartoon' | 'ball-and-stick' | 'surface' | 'spacefill';
   colorScheme?: 'chain' | 'secondary-structure' | 'residue-type' | 'hydrophobicity';
   showSideChains?: boolean;
@@ -51,6 +52,7 @@ interface StructureViewerProps {
 const StructureViewer = forwardRef<any, StructureViewerProps>(({
   pdbId,
   url,
+  localBasePath = '/data/ecod/chain_data', // Default path to your local repository
   style = 'cartoon',
   colorScheme = 'chain',
   showSideChains = false,
@@ -175,7 +177,7 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
 
           // Load structure if pdbId or url is provided
           if (pdbId) {
-            loadStructure(plugin, pdbId);
+            loadStructureLocal(plugin, pdbId);
           } else if (url) {
             loadStructureFromUrl(plugin, url);
           } else {
@@ -210,7 +212,7 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
   // Load structure when pdbId changes
   useEffect(() => {
     if (isInitialized && pluginRef.current && pdbId) {
-      loadStructure(pluginRef.current, pdbId);
+      loadStructureLocal(pluginRef.current, pdbId);
     }
   }, [pdbId, isInitialized]);
 
@@ -245,7 +247,71 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
     }
   }, [isInitialized, isLoading, selectedPosition]);
 
-  // Load structure from PDB ID
+  // Generate path to the local structure file based on PDB ID and chain
+  const getLocalStructurePath = (pdbId: string): string => {
+    // Extract the base name and chain from pdbId (format could be "1abc" or "1abc_A")
+    const idParts = pdbId.toLowerCase().split('_');
+    const baseName = idParts[0];
+    const chain = idParts.length > 1 ? idParts[1] : '';
+
+    // Get the first two characters for the subdirectory
+    const subDir = baseName.substring(0, 2);
+
+    // Construct the path
+    let path = `${localBasePath}/${subDir}/${baseName}`;
+    if (chain) {
+      path += `_${chain}`;
+    }
+    path += '.pdb'; // Assuming PDB format
+
+    return path;
+  };
+
+  // Load structure from local repository
+  const loadStructureLocal = async (plugin: PluginContext, id: string) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // Clear any existing structures
+      if (structureRef.current) {
+        plugin.builders.structure.hierarchy.removeAll();
+        structureRef.current = null;
+      }
+
+      // Get the path to the local structure file
+      const localPath = getLocalStructurePath(id);
+
+      // Create a download component
+      const data = await plugin.builders.data.download({ url: localPath, isBinary: false }, { state: { isGhost: true } });
+
+      // Determine format based on file extension
+      const format = localPath.toLowerCase().endsWith('.pdb') ? 'pdb' : 'mmcif';
+
+      const trajectory = await plugin.builders.structure.parseTrajectory(data, format);
+
+      // Create the molecular structure
+      const model = await plugin.builders.structure.createModel(trajectory);
+      const structure = await plugin.builders.structure.createStructure(model);
+
+      // Store the structure reference
+      structureRef.current = structure;
+
+      // Apply initial visualization
+      await updateVisualization();
+
+      // Set loading complete
+      setIsLoading(false);
+      if (onLoaded) onLoaded();
+    } catch (err) {
+      console.error('Error loading structure from local path:', err);
+      setError(`Failed to load structure: ${err}`);
+      setIsLoading(false);
+      if (onError) onError(err as Error);
+    }
+  };
+
+  // Original web-based load function (kept for backward compatibility)
   const loadStructure = async (plugin: PluginContext, id: string) => {
     try {
       setIsLoading(true);
