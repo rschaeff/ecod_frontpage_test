@@ -47,16 +47,6 @@ interface ExpandedNodesState {
   [key: string]: boolean;
 }
 
-export default function ECODTreePage({}: ECODTreePageProps) {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [activeFilter, setActiveFilter] = useState<string>('all');
-  const [expandedNodes, setExpandedNodes] = useState<ExpandedNodesState>({
-    'A1': true,
-    'X1.1': true
-  });
-
-  // ... rest of the component
 
 // ECODTreePage component - Main component for the tree view page
 export default function ECODTreePage() {
