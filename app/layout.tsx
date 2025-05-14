@@ -1,24 +1,28 @@
-import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+'use client';
+
+import { ReactNode } from 'react';
+import RootProvider from './providers';
 import './globals.css';
-import ClientLayout from '@/components/ClientLayout';
 
-const inter = Inter({ subsets: ['latin'] });
+interface RootLayoutProps {
+  children: ReactNode;
+}
 
-export const metadata: Metadata = {
-  title: 'ECOD - Evolutionary Classification of Protein Domains',
-  description: 'A hierarchical classification of protein domains based on evolutionary relationships',
-};
-
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+/**
+ * Root layout component for the entire application
+ * Wraps the entire app with the RootProvider to ensure contexts are available everywhere
+ */
+export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en">
-      <body className={inter.className}>
-        <ClientLayout>{children}</ClientLayout>
+      <head>
+        <title>ECOD - Evolutionary Classification of Protein Domains</title>
+        <meta name="description" content="Evolutionary Classification of Protein Domains Database" />
+      </head>
+      <body>
+        <RootProvider>
+          {children}
+        </RootProvider>
       </body>
     </html>
   );

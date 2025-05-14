@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, FormEvent, ChangeEvent } from 'react';
 import { Search } from 'lucide-react';
+import { useSearch } from '@/contexts/SearchContext';
+import SearchWrapper from '@/components/wrappers/SearchWrapper';
 
 /**
  * Props for the SearchForm component
@@ -19,8 +21,6 @@ interface SearchFormProps {
   buttonClassName?: string;
   /** CSS class for the search input */
   inputClassName?: string;
-  /** Callback when search is submitted */
-  onSearch?: (query: string) => void;
   /** Examples to show below the search box */
   examples?: Array<{
     id: string;
@@ -42,59 +42,26 @@ const DEFAULT_EXAMPLES = [
 ];
 
 /**
- * SearchForm component for ECOD website
- *
- * A reusable search form that handles query input, submission,
- * and displays example searches.
+ * Inner component that implements the search form functionality
  */
-const SearchForm: React.FC<SearchFormProps> = ({
+function SearchFormInner({
   className = '',
   defaultQuery = '',
   placeholder = 'Search by keyword, PDB ID, UniProt ID, or domain ID...',
   showExamples = true,
   buttonClassName = '',
   inputClassName = '',
-  onSearch,
   examples = DEFAULT_EXAMPLES,
   saveHistory = false
-}) => {
+}: SearchFormProps) {
+  // Get context directly - it's safe now because of the wrapper
+  const { state: searchState, performSearch, clearSearch } = useSearch();
+
   // State for the search query
   const [query, setQuery] = useState<string>(defaultQuery);
 
-  // State for search history
-  const [searchHistory, setSearchHistory] = useState<string[]>([]);
-
   // State for showing search history dropdown
   const [showHistory, setShowHistory] = useState<boolean>(false);
-
-  // Load search history from localStorage on component mount
-  useEffect(() => {
-    if (saveHistory) {
-      const savedHistory = localStorage.getItem('ecodSearchHistory');
-      if (savedHistory) {
-        try {
-          setSearchHistory(JSON.parse(savedHistory));
-        } catch (e) {
-          console.error('Error parsing search history:', e);
-          // Reset history if corrupt
-          localStorage.setItem('ecodSearchHistory', JSON.stringify([]));
-        }
-      }
-    }
-  }, [saveHistory]);
-
-  // Save search to history
-  const saveToHistory = (searchQuery: string): void => {
-    if (!saveHistory || !searchQuery.trim()) return;
-
-    const newHistory = [
-      searchQuery,
-      ...searchHistory.filter(item => item !== searchQuery).slice(0, 9) // Keep last 10 unique searches
-    ];
-
-    setSearchHistory(newHistory);
-    localStorage.setItem('ecodSearchHistory', JSON.stringify(newHistory));
-  };
 
   // Handle input change
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>): void => {
@@ -111,41 +78,21 @@ const SearchForm: React.FC<SearchFormProps> = ({
 
     if (!trimmedQuery) return;
 
-    // Save to search history
-    saveToHistory(trimmedQuery);
-
-    // Call onSearch callback if provided
-    if (onSearch) {
-      onSearch(trimmedQuery);
-      return;
-    }
-
-    // Default behavior: navigate to search page
-    window.location.href = `/search?kw=${encodeURIComponent(trimmedQuery)}`;
+    // Use the performSearch function from context
+    performSearch(trimmedQuery);
   };
 
   // Handle clicking on a search history item
   const handleHistoryItemClick = (item: string): void => {
     setQuery(item);
     setShowHistory(false);
-
-    // Navigate immediately when clicking history item
-    if (onSearch) {
-      onSearch(item);
-    } else {
-      window.location.href = `/search?kw=${encodeURIComponent(item)}`;
-    }
+    performSearch(item);
   };
 
   // Handle clicking on an example search
   const handleExampleClick = (query: string, e: React.MouseEvent): void => {
     e.preventDefault();
-
-    // Save to search history
-    saveToHistory(query);
-
-    // Navigate to search page
-    window.location.href = `/search?kw=${encodeURIComponent(query)}`;
+    performSearch(query);
   };
 
   return (
@@ -162,7 +109,7 @@ const SearchForm: React.FC<SearchFormProps> = ({
             placeholder={placeholder}
             value={query}
             onChange={handleInputChange}
-            onFocus={() => searchHistory.length > 0 && setShowHistory(true)}
+            onFocus={() => searchState.searchHistory.length > 0 && setShowHistory(true)}
             onBlur={() => setTimeout(() => setShowHistory(false), 200)}
             className={`flex-grow p-3 pl-10 text-gray-800 outline-none w-full ${inputClassName}`}
             aria-label="Search query"
@@ -172,10 +119,10 @@ const SearchForm: React.FC<SearchFormProps> = ({
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" aria-hidden="true" />
 
           {/* Search history dropdown */}
-          {showHistory && searchHistory.length > 0 && (
+          {showHistory && searchState.searchHistory.length > 0 && (
             <div className="absolute top-full left-0 right-0 bg-white shadow-lg rounded-b-lg z-10 mt-1 border border-gray-200 max-h-64 overflow-y-auto">
               <ul>
-                {searchHistory.map((item, index) => (
+                {searchState.searchHistory.map((item, index) => (
                   <li key={`history-${index}`}>
                     <button
                       type="button"
@@ -194,8 +141,7 @@ const SearchForm: React.FC<SearchFormProps> = ({
                     type="button"
                     className="text-xs text-gray-500 hover:text-gray-700 w-full text-center"
                     onClick={() => {
-                      setSearchHistory([]);
-                      localStorage.removeItem('ecodSearchHistory');
+                      clearSearch();
                       setShowHistory(false);
                     }}
                   >
@@ -236,6 +182,15 @@ const SearchForm: React.FC<SearchFormProps> = ({
       )}
     </div>
   );
-};
+}
 
-export default SearchForm;
+/**
+ * Wrapped SearchForm component that ensures SearchContext is available
+ */
+export default function SearchForm(props: SearchFormProps) {
+  return (
+    <SearchWrapper>
+      <SearchFormInner {...props} />
+    </SearchWrapper>
+  );
+}
