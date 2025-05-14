@@ -5,7 +5,7 @@ import { Search, Database, Download, HelpCircle, FileSearch, X } from 'lucide-re
 import Link from 'next/link';
 
 // Import modular components
-import PageLayout from '@/components/layout/PageLayout';
+import AppLayout from '@/components/layout/AppLayout'
 import SearchForm from '@/components/SearchForm';
 import StatCard from '@/components/StatCard';
 import ErrorState from '@/components/ui/ErrorState';
@@ -65,7 +65,7 @@ export default function ECODHomePage() {
   ];
 
   return (
-    <PageLayout
+    <AppLayout
       title="Evolutionary Classification of Protein Domains"
       activePage="home"
     >
@@ -430,6 +430,6 @@ export default function ECODHomePage() {
           </div>
         </div>
       </section>
-    </PageLayout>
+    </AppLayout>
   );
 }

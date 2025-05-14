@@ -5,7 +5,7 @@ import { Search, ChevronRight, ChevronDown, Info, Filter, Download } from 'lucid
 import Link from 'next/link';
 
 // Import modular components
-import PageLayout from '@/components/layout/PageLayout';
+import AppLayout from '@/components/layout/AppLayout';
 import Breadcrumb from '@/components/navigation/Breadcrumb';
 import SearchForm from '@/components/SearchForm';
 import DataTable from '@/components/ui/DataTable';
@@ -97,7 +97,7 @@ export default function ECODTreePage() {
   };
 
   return (
-    <PageLayout
+    <AppLayout
       title="ECOD Classification Tree Browser"
       subtitle="Browse the hierarchical classification of protein domains by A, X, H, T, and F groups"
       activePage="tree"
@@ -328,7 +328,7 @@ export default function ECODTreePage() {
           )}
         </div>
       </section>
-    </PageLayout>
+    </AppLayout>
   );
 }
 

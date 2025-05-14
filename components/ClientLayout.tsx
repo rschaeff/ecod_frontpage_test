@@ -30,7 +30,6 @@ export default function ClientLayout({ children }: ClientLayoutProps) {
   return (
     <AppContextProvider>
       {children}
-      {enableDebugger && <ContextDebugger />}
     </AppContextProvider>
   );
 }

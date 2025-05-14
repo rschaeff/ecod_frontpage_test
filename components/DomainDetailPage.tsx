@@ -8,7 +8,7 @@ import {
 import Link from 'next/link';
 
 // Import modular components
-import PageLayout from '@/components/layout/PageLayout';
+import AppLayout from '@/components/layout/AppLayout';
 import Breadcrumb from '@/components/navigation/Breadcrumb';
 import StructureViewer from '@/components/StructureViewer';
 import SequenceViewer from '@/components/SequenceViewer';
@@ -292,19 +292,19 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
   // If loading, show loading state
   if (loading) {
     return (
-      <PageLayout 
+      <AppLayout
         title="Loading Domain" 
         activePage="tree"
       >
         <LoadingState message={`Loading domain information for ${params.id}...`} />
-      </PageLayout>
+      </AppLayout>
     );
   }
   
   // If error, show error state
   if (error || !domain) {
     return (
-      <PageLayout 
+      <AppLayout
         title="Domain Not Found" 
         activePage="tree"
       >
@@ -322,13 +322,13 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
             </>
           }
         />
-      </PageLayout>
+      </AppLayout>
     );
   }
   
   // If domain data is loaded, render the domain detail view
   return (
-    <PageLayout
+    <AppLayout
       title={domain.id}
       subtitle={domain.description}
       activePage="tree"
@@ -625,6 +625,6 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
           </div>
         </div>
       </section>
-    </PageLayout>
+    </AppLayout>
   );
 }
