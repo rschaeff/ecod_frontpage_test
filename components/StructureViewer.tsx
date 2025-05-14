@@ -1,410 +1,558 @@
-// components/StructureViewer.tsx
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import ClientOnly from './ClientOnly';
+import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
+import { PluginUIContext } from 'molstar/lib/mol-plugin-ui';
+import { DefaultPluginUISpec } from 'molstar/lib/mol-plugin-ui/spec';
+import { StructureRepresentationPresetProvider } from 'molstar/lib/mol-plugin-state/builder/structure';
+import { MolScriptBuilder as MS } from 'molstar/lib/mol-script/language/builder';
+import { StateObjectSelector } from 'molstar/lib/mol-state';
+import { StateTransforms } from 'molstar/lib/mol-plugin-state/transforms';
+import { PluginStateObject } from 'molstar/lib/mol-plugin-state/objects';
+import { Color } from 'molstar/lib/mol-util/color';
+import { ColorTheme } from 'molstar/lib/mol-theme/color';
+import { Asset } from 'molstar/lib/mol-util/assets';
+import { Structure } from 'molstar/lib/mol-model/structure';
+import { StructureElement } from 'molstar/lib/mol-model/structure/structure';
+import { ParamDefinition as PD } from 'molstar/lib/mol-util/param-definition';
+import { Script } from 'molstar/lib/mol-script/script';
 
+// Define prop types for the component
 interface StructureViewerProps {
   pdbId?: string;
   url?: string;
-  height?: string;
-  width?: string;
   style?: 'cartoon' | 'ball-and-stick' | 'surface' | 'spacefill';
+  colorScheme?: 'chain' | 'secondary-structure' | 'residue-type' | 'hydrophobicity';
+  showSideChains?: boolean;
   showLigands?: boolean;
   showWater?: boolean;
-  colorScheme?: 'chain-id' | 'residue-type' | 'secondary-structure' | 'sequence-id';
+  quality?: 'low' | 'medium' | 'high';
+  height?: string;
+  width?: string;
   highlights?: {
     start: number;
     end: number;
     chainId: string;
     color?: string;
   }[];
+  selectedPosition?: number | null;
+  onResidueSelect?: (residueNumber: number) => void;
   onLoaded?: () => void;
   onError?: (error: Error) => void;
 }
 
-function MolstarViewer({
+/**
+ * StructureViewer component using mol* for 3D visualization
+ *
+ * This component creates a 3D visualization of a protein structure
+ * using mol* library. It supports various rendering styles, highlighting,
+ * and interaction with protein structure.
+ */
+const StructureViewer = forwardRef<any, StructureViewerProps>(({
   pdbId,
   url,
-  height = '400px',
-  width = '100%',
   style = 'cartoon',
+  colorScheme = 'chain',
+  showSideChains = false,
   showLigands = true,
   showWater = false,
-  colorScheme = 'chain-id',
+  quality = 'medium',
+  height = '100%',
+  width = '100%',
   highlights = [],
+  selectedPosition = null,
+  onResidueSelect,
   onLoaded,
   onError
-}: StructureViewerProps) {
+}, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const viewerRef = useRef<any>(null);
-  const [loading, setLoading] = useState(true);
+  const pluginRef = useRef<PluginUIContext | null>(null);
+  const structureRef = useRef<StateObjectSelector<PluginStateObject.Molecule.Structure> | null>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let isMounted = true;
-    
-    const initViewer = async () => {
-      if (!containerRef.current) return;
+  // Expose methods to parent through ref
+  useImperativeHandle(ref, () => ({
+    // Highlight a specific residue in the structure
+    highlightResidue: (residueNumber: number) => {
+      highlightSelectedResidue(residueNumber);
+    },
+
+    // Reset the view to default orientation
+    resetView: () => {
+      if (pluginRef.current) {
+        try {
+          pluginRef.current.managers.camera.reset();
+          pluginRef.current.managers.camera.focus();
+        } catch (err) {
+          console.error("Error resetting view:", err);
+        }
+      }
+    },
+
+    // Export the current view as an image
+    exportImage: async (options: { width?: number, height?: number } = {}) => {
+      if (!pluginRef.current) return null;
 
       try {
-        // Dynamically import Mol* to avoid SSR issues
-        const molstar = await import('molstar/lib/mol-plugin-ui');
-        const plugin = new molstar.PluginUIContext({
-          layoutIsExpanded: false,
-          layoutShowControls: false,
-          layoutShowRemoteState: false,
-          layoutControlsDisplay: 'reactive',
-          layoutShowSequence: true,
-          layoutShowLog: false,
-          layoutShowLeftPanel: false,
-        });
+        // Get canvas size if not specified
+        const canvas = pluginRef.current.canvas3d?.webgl.gl.canvas;
+        const width = options.width || (canvas as HTMLCanvasElement).width;
+        const height = options.height || (canvas as HTMLCanvasElement).height;
 
+        // Request image from mol*
+        const imageData = await pluginRef.current.helpers.imageExport.getImageData({ width, height });
+        return imageData;
+      } catch (err) {
+        console.error("Error exporting image:", err);
+        return null;
+      }
+    },
+
+    // Get the plugin instance
+    getPlugin: () => pluginRef.current
+  }));
+
+  // Initialize the mol* viewer
+  useEffect(() => {
+    // Prevent multiple initializations
+    if (isInitialized || !containerRef.current) return;
+
+    let unmounted = false;
+
+    const initMolstar = async () => {
+      try {
+        // Create a new plugin instance with default spec
+        const plugin = new PluginUIContext(DefaultPluginUISpec());
+
+        // Initialize the plugin
         await plugin.init();
-        plugin.render(containerRef.current);
-        
-        // Save reference to the viewer
-        viewerRef.current = plugin;
-        
-        // Load structure if ID provided
-        if (pdbId) {
-          loadStructure(plugin, pdbId);
-        } else if (url) {
-          loadStructureFromUrl(plugin, url);
+        pluginRef.current = plugin;
+
+        // Render the plugin to the container
+        if (containerRef.current && !unmounted) {
+          plugin.layout.setRoot({ kind: 'canvas3d' });
+          plugin.canvas3d?.setProps({
+            camera: { fov: 45 },
+            renderer: {
+              backgroundColor: { r: 0.9, g: 0.9, b: 0.9 },
+              pickingAlphaThreshold: 0.5,
+            }
+          });
+
+          // Set initial canvas size
+          plugin.layout.setProps({
+            layoutIsExpanded: false,
+            showControls: false,
+            showSequence: false,
+            showLog: false,
+            showLeftPanel: false
+          });
+
+          plugin.canvas3d?.resized();
+
+          // Add interactions for residue selection
+          if (onResidueSelect) {
+            plugin.behaviors.interaction.click.subscribe(e => {
+              if (e.current.loci.kind === 'element-loci') {
+                // Get the residue number from the clicked element
+                const loc = e.current.loci;
+                if (!Structure.isLoci(loc)) return;
+
+                const seq_id = StructureElement.Location.is(loc.elements[0])
+                  ? loc.elements[0].unit.model.atomicHierarchy.residues.label_seq_id.value(loc.elements[0].element)
+                  : null;
+
+                if (seq_id !== null) {
+                  onResidueSelect(seq_id);
+                }
+              }
+            });
+          }
+
+          setIsInitialized(true);
+
+          // Load structure if pdbId or url is provided
+          if (pdbId) {
+            loadStructure(plugin, pdbId);
+          } else if (url) {
+            loadStructureFromUrl(plugin, url);
+          } else {
+            setIsLoading(false);
+            if (onLoaded) onLoaded();
+          }
         }
       } catch (err) {
-        console.error('Error initializing Mol* viewer:', err);
-        if (isMounted) {
+        console.error('Error initializing mol* viewer:', err);
+        if (!unmounted) {
           setError('Failed to initialize 3D viewer');
-          setLoading(false);
+          setIsLoading(false);
           if (onError) onError(err as Error);
         }
       }
     };
 
-    initViewer();
+    // Start initialization
+    initMolstar();
 
     // Cleanup
     return () => {
-      isMounted = false;
-      if (viewerRef.current) {
-        viewerRef.current.dispose();
-        viewerRef.current = null;
+      unmounted = true;
+      if (pluginRef.current) {
+        pluginRef.current.dispose();
+        pluginRef.current = null;
+        structureRef.current = null;
       }
     };
   }, []);
 
-  // Handle changes to visualization options
+  // Load structure when pdbId changes
   useEffect(() => {
-    if (viewerRef.current && !loading) {
+    if (isInitialized && pluginRef.current && pdbId) {
+      loadStructure(pluginRef.current, pdbId);
+    }
+  }, [pdbId, isInitialized]);
+
+  // Load structure from URL when url changes
+  useEffect(() => {
+    if (isInitialized && pluginRef.current && url) {
+      loadStructureFromUrl(pluginRef.current, url);
+    }
+  }, [url, isInitialized]);
+
+  // Update visualization when style, highlights, or options change
+  useEffect(() => {
+    if (isInitialized && pluginRef.current && !isLoading && structureRef.current) {
       updateVisualization();
     }
-  }, [style, showLigands, showWater, colorScheme, highlights, loading]);
+  }, [
+    isInitialized,
+    isLoading,
+    style,
+    colorScheme,
+    showSideChains,
+    showLigands,
+    showWater,
+    quality,
+    highlights
+  ]);
 
-  // Handle changes to PDB ID
+  // Handle selected position changes
   useEffect(() => {
-    if (viewerRef.current && pdbId) {
-      loadStructure(viewerRef.current, pdbId);
+    if (isInitialized && pluginRef.current && !isLoading && structureRef.current && selectedPosition !== null) {
+      highlightSelectedResidue(selectedPosition);
     }
-  }, [pdbId]);
+  }, [isInitialized, isLoading, selectedPosition]);
 
   // Load structure from PDB ID
-  const loadStructure = async (plugin: any, id: string) => {
+  const loadStructure = async (plugin: PluginUIContext, id: string) => {
     try {
-      setLoading(true);
+      setIsLoading(true);
       setError(null);
-      
-      // Clear existing structure
-      await plugin.clear();
-      
-      // Download from RCSB PDB
-      const data = await plugin.builders.data.download({ url: `https://files.rcsb.org/download/${id}.cif`, isBinary: false }, { state: { isGhost: false } });
-      
-      if (data) {
-        // Create molecular structure
-        const trajectory = await plugin.builders.structure.parseTrajectory(data, 'mmcif');
-        const model = await plugin.builders.structure.createModel(trajectory);
-        const structure = await plugin.builders.structure.createStructure(model);
-        
-        // Apply visualization
-        await updateVisualization();
-        
-        setLoading(false);
-        if (onLoaded) onLoaded();
+
+      // Clear any existing structures
+      if (structureRef.current) {
+        plugin.builders.structure.hierarchy.removeAll();
+        structureRef.current = null;
       }
+
+      // Fetch from RCSB PDB or PDBe
+      const url = `https://files.rcsb.org/download/${id.toUpperCase()}.cif`;
+
+      // Create a download component
+      const data = await plugin.builders.data.download({ url, isBinary: false }, { state: { isGhost: true } });
+      const trajectory = await plugin.builders.structure.parseTrajectory(data, 'mmcif');
+
+      // Create the molecular structure
+      const model = await plugin.builders.structure.createModel(trajectory);
+      const structure = await plugin.builders.structure.createStructure(model);
+
+      // Store the structure reference
+      structureRef.current = structure;
+
+      // Apply initial visualization
+      await updateVisualization();
+
+      // Set loading complete
+      setIsLoading(false);
+      if (onLoaded) onLoaded();
     } catch (err) {
       console.error('Error loading structure:', err);
       setError('Failed to load structure');
-      setLoading(false);
+      setIsLoading(false);
       if (onError) onError(err as Error);
     }
   };
 
   // Load structure from URL
-  const loadStructureFromUrl = async (plugin: any, structureUrl: string) => {
+  const loadStructureFromUrl = async (plugin: PluginUIContext, structureUrl: string) => {
     try {
-      setLoading(true);
+      setIsLoading(true);
       setError(null);
-      
-      // Clear existing structure
-      await plugin.clear();
-      
-      // Download from URL
-      const data = await plugin.builders.data.download({ url: structureUrl }, { state: { isGhost: false } });
-      
-      if (data) {
-        // Determine format based on URL extension
-        const format = structureUrl.endsWith('.pdb') ? 'pdb' : 'mmcif';
-        
-        // Create molecular structure
-        const trajectory = await plugin.builders.structure.parseTrajectory(data, format);
-        const model = await plugin.builders.structure.createModel(trajectory);
-        const structure = await plugin.builders.structure.createStructure(model);
-        
-        // Apply visualization
-        await updateVisualization();
-        
-        setLoading(false);
-        if (onLoaded) onLoaded();
+
+      // Clear any existing structures
+      if (structureRef.current) {
+        plugin.builders.structure.hierarchy.removeAll();
+        structureRef.current = null;
       }
+
+      // Determine format based on URL extension
+      const format = structureUrl.toLowerCase().endsWith('.pdb') ? 'pdb' : 'mmcif';
+
+      // Create a download component
+      const data = await plugin.builders.data.download({ url: structureUrl, isBinary: false }, { state: { isGhost: true } });
+      const trajectory = await plugin.builders.structure.parseTrajectory(data, format);
+
+      // Create the molecular structure
+      const model = await plugin.builders.structure.createModel(trajectory);
+      const structure = await plugin.builders.structure.createStructure(model);
+
+      // Store the structure reference
+      structureRef.current = structure;
+
+      // Apply initial visualization
+      await updateVisualization();
+
+      // Set loading complete
+      setIsLoading(false);
+      if (onLoaded) onLoaded();
     } catch (err) {
       console.error('Error loading structure from URL:', err);
       setError('Failed to load structure');
-      setLoading(false);
+      setIsLoading(false);
       if (onError) onError(err as Error);
     }
   };
 
-  // Update visualization style, colors, etc.
-  const updateVisualization = async () => {
-    if (!viewerRef.current) return;
-    
-    try {
-      const plugin = viewerRef.current;
-      
-      // Get current structure
-      const structure = plugin.managers.structure.hierarchy.current.structures[0];
-      if (!structure) return;
-      
-      // Clear existing representations
-      const update = plugin.build();
-      update.delete(plugin.managers.structure.hierarchy.current.structures[0].representations);
-      await update.commit();
+  // Get the representation preset based on style
+  const getRepresentationPreset = () => {
+    switch (style) {
+      case 'cartoon':
+        return StructureRepresentationPresetProvider.cartoon.id;
+      case 'ball-and-stick':
+        return StructureRepresentationPresetProvider.ball_and_stick.id;
+      case 'surface':
+        return StructureRepresentationPresetProvider.surface.id;
+      case 'spacefill':
+        return StructureRepresentationPresetProvider.spacefill.id;
+      default:
+        return StructureRepresentationPresetProvider.cartoon.id;
+    }
+  };
 
-      // Add main representation
-      const reprProps = getRepresentationProps(style);
-      const colorProps = getColorProps(colorScheme);
-      
-      // Create visual for main structure
-      const structureVisual = plugin.build()
-        .to(structure)
-        .add(plugin.builders.structure.representation.molecularSurface, {
-          ...reprProps,
-          color: colorProps
-        });
-      
-      // Add highlighted regions if specified
-      if (highlights.length > 0) {
-        const mol = await import('molstar/lib/mol-script/language/builder');
-        
-        for (const hl of highlights) {
-          const selection = mol.MolScriptBuilder.struct.generator.atomGroups({
-            chain_id: hl.chainId,
-            residue_test: mol.MolScriptBuilder.core.rel.inRange([
-              mol.MolScriptBuilder.struct.atomProperty.macromolecular.label_seq_id(),
-              hl.start, 
-              hl.end
-            ])
-          });
-          
-          structureVisual.add(plugin.builders.structure.representation.molecularSurface, {
-            ...reprProps,
-            color: {
-              name: 'uniform',
-              params: { value: { r: 1, g: 0.5, b: 0 } } // Orange highlight color by default
-            }
-          }, { selector: selection });
+  // Get the color theme based on selection
+  const getColorTheme = () => {
+    switch (colorScheme) {
+      case 'chain':
+        return ColorTheme.chain.id;
+      case 'secondary-structure':
+        return ColorTheme.secondaryStructure.id;
+      case 'residue-type':
+        return ColorTheme.residueType.id;
+      case 'hydrophobicity':
+        return ColorTheme.hydrophobicity.id;
+      default:
+        return ColorTheme.chain.id;
+    }
+  };
+
+  // Update visualization with current settings
+  const updateVisualization = async () => {
+    if (!pluginRef.current || !structureRef.current) return;
+
+    try {
+      const plugin = pluginRef.current;
+
+      // Remove existing representations
+      plugin.builders.structure.representation.removeAll();
+
+      // Quality factor for representation detail
+      const qualityFactor = quality === 'high' ? 2 : quality === 'low' ? 0.5 : 1;
+
+      // Apply the main representation preset
+      const preset = getRepresentationPreset();
+      const colorThemeId = getColorTheme();
+
+      await plugin.builders.structure.representation.addPreset(
+        structureRef.current,
+        preset,
+        {
+          theme: { globalName: colorThemeId },
+          quality: {
+            value: qualityFactor
+          }
         }
+      );
+
+      // Handle highlighted regions
+      for (const highlight of highlights) {
+        // Create a selection for the highlighted region
+        const selection = MS.struct.generator.atomGroups({
+          'chain-test': MS.core.rel.eq([MS.struct.atomProperty.core.auth_asym_id(), highlight.chainId]),
+          'residue-test': MS.core.rel.inRange([
+            MS.struct.atomProperty.macromolecular.label_seq_id(),
+            highlight.start,
+            highlight.end
+          ])
+        });
+
+        // Apply a selection component
+        const selectionComp = await plugin.builders.structure.component.addTrajectory(structureRef.current, selection);
+
+        // Highlight color
+        const highlightColor = highlight.color ?
+          Color.fromRgb(parseInt(highlight.color.substring(1, 3), 16) / 255,
+                         parseInt(highlight.color.substring(3, 5), 16) / 255,
+                         parseInt(highlight.color.substring(5, 7), 16) / 255) :
+          Color.fromRgb(1, 0.5, 0);
+
+        // Apply representation with highlight color
+        await plugin.builders.structure.representation.addRepresentation(
+          selectionComp,
+          {
+            type: preset,
+            color: 'uniform',
+            colorParams: { value: highlightColor },
+            size: 'uniform',
+            sizeParams: { value: 1.5 }
+          }
+        );
       }
-      
-      // Add ligands if enabled
+
+      // Handle ligands if enabled
       if (showLigands) {
-        const mol = await import('molstar/lib/mol-script/language/builder');
-        const ligandSelection = mol.MolScriptBuilder.struct.generator.atomGroups({
-          entity_test: mol.MolScriptBuilder.core.rel.eq([
-            mol.MolScriptBuilder.struct.atomProperty.macromolecular.entityType(),
-            'non-polymer'
-          ])
-        });
-        
-        structureVisual.add(plugin.builders.structure.representation.ballAndStick, {
-          sizeTheme: { name: 'physical' },
-          color: { name: 'element-symbol' }
-        }, { selector: ligandSelection });
+        const ligandSelection = MS.struct.modifier.union([
+          MS.struct.generator.atomGroups({
+            'entity-test': MS.core.rel.eq([MS.struct.atomProperty.macromolecular.entityType(), 'non-polymer'])
+          }),
+          // Also include nucleic acids which are often bound to proteins
+          MS.struct.generator.atomGroups({
+            'entity-test': MS.core.rel.eq([MS.struct.atomProperty.macromolecular.entityType(), 'nucleic'])
+          })
+        ]);
+
+        const ligandComp = await plugin.builders.structure.component.addTrajectory(structureRef.current, ligandSelection);
+
+        await plugin.builders.structure.representation.addRepresentation(
+          ligandComp,
+          {
+            type: 'ball-and-stick',
+            color: 'element-symbol',
+            size: 'physical'
+          }
+        );
       }
-      
-      // Add water molecules if enabled
+
+      // Handle water molecules if enabled
       if (showWater) {
-        const mol = await import('molstar/lib/mol-script/language/builder');
-        const waterSelection = mol.MolScriptBuilder.struct.generator.atomGroups({
-          entity_test: mol.MolScriptBuilder.core.rel.eq([
-            mol.MolScriptBuilder.struct.atomProperty.macromolecular.entityType(),
-            'water'
-          ])
+        const waterSelection = MS.struct.generator.atomGroups({
+          'entity-test': MS.core.rel.eq([MS.struct.atomProperty.macromolecular.entityType(), 'water'])
         });
-        
-        structureVisual.add(plugin.builders.structure.representation.ballAndStick, {
-          sizeTheme: { name: 'physical' },
-          color: { name: 'element-symbol' },
-          alpha: 0.5
-        }, { selector: waterSelection });
+
+        const waterComp = await plugin.builders.structure.component.addTrajectory(structureRef.current, waterSelection);
+
+        await plugin.builders.structure.representation.addRepresentation(
+          waterComp,
+          {
+            type: 'ball-and-stick',
+            color: 'element-symbol',
+            size: 'physical',
+            sizeParams: { value: 0.6 },
+            transparency: { alpha: 0.5 }
+          }
+        );
       }
-      
-      // Commit all changes
-      await structureVisual.commit();
-      
-      // Adjust camera to focus on structure
+
+      // Focus the camera on the structure
       plugin.managers.camera.reset();
       plugin.managers.camera.focus();
+
     } catch (err) {
       console.error('Error updating visualization:', err);
     }
   };
 
-  // Helper to get representation properties based on style
-  const getRepresentationProps = (visualStyle: string) => {
-    switch (visualStyle) {
-      case 'cartoon':
-        return {
-          alpha: 1.0,
-          quality: 'auto' as const,
-          material: { metalness: 0, roughness: 1 }
-        };
-      case 'ball-and-stick':
-        return {
-          alpha: 1.0,
-          sizeTheme: { name: 'physical' as const },
-          linkScale: 0.4,
-          linkSpacing: 1.0,
-          ignoreHydrogens: false,
-          quality: 'auto' as const
-        };
-      case 'surface':
-        return {
-          alpha: 0.7,
-          quality: 'medium' as const
-        };
-      case 'spacefill':
-        return {
-          alpha: 1.0,
-          quality: 'medium' as const,
-          material: { metalness: 0, roughness: 1 }
-        };
-      default:
-        return {
-          alpha: 1.0,
-          quality: 'auto' as const
-        };
-    }
-  };
+  // Highlight a specific residue
+  const highlightSelectedResidue = async (residueNumber: number | null) => {
+    if (!pluginRef.current || !structureRef.current || residueNumber === null) return;
 
-  // Helper to get color properties based on scheme
-  const getColorProps = (scheme: string) => {
-    switch (scheme) {
-      case 'chain-id':
-        return { name: 'chain-id' as const };
-      case 'residue-type':
-        return { name: 'residue-type' as const };
-      case 'secondary-structure':
-        return { name: 'secondary-structure' as const };
-      case 'sequence-id':
-        return { name: 'sequence-id' as const };
-      default:
-        return { name: 'chain-id' as const };
+    try {
+      const plugin = pluginRef.current;
+
+      // Remove any existing selection highlight
+      plugin.managers.structure.component.state.select(
+        StateTransforms.Misc.CreateSelectionFromBundle.id
+      ).forEach(s => plugin.managers.structure.component.state.remove([s.transform.ref]));
+
+      // Create selection for the residue
+      const selection = MS.struct.generator.atomGroups({
+        'residue-test': MS.core.rel.eq([
+          MS.struct.atomProperty.macromolecular.label_seq_id(),
+          residueNumber
+        ])
+      });
+
+      // Create a visual for the selection
+      const selectionComp = await plugin.builders.structure.component.addTrajectory(structureRef.current, selection);
+
+      // Add a representation that makes the selection stand out
+      await plugin.builders.structure.representation.addRepresentation(
+        selectionComp,
+        {
+          type: 'ball-and-stick',
+          color: 'uniform',
+          colorParams: { value: Color.fromRgb(1, 0.8, 0) }, // Gold color
+          size: 'uniform',
+          sizeParams: { value: 1.8 }
+        }
+      );
+
+      // Focus camera on the selected residue
+      const loci = plugin.managers.structure.hierarchy.current.structures[0].components[0].cell.obj?.data.
+        valueOf().model.atomicHierarchy.residueAtomSegments;
+
+      if (loci) {
+        plugin.managers.camera.focusLoci(loci);
+      }
+
+    } catch (err) {
+      console.error('Error highlighting residue:', err);
     }
   };
 
   return (
-    <div style={{ position: 'relative', width, height }}>
-      {loading && (
-        <div 
-          style={{ 
-            position: 'absolute', 
-            top: 0, 
-            left: 0, 
-            right: 0, 
-            bottom: 0, 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center',
-            background: 'rgba(255,255,255,0.7)',
-            zIndex: 10
-          }}
-        >
-          <div 
-            style={{ 
-              border: '4px solid #f3f3f3',
-              borderTop: '4px solid #3498db',
-              borderRadius: '50%',
-              width: '50px',
-              height: '50px',
-              animation: 'spin 2s linear infinite'
-            }} 
-          />
-        </div>
-      )}
-      
+    <div
+      ref={containerRef}
+      style={{
+        width: width,
+        height: height,
+        position: 'relative',
+        background: '#f5f5f5'
+      }}
+      className="mol-viewer-container"
+    >
       {error && (
-        <div 
-          style={{ 
-            position: 'absolute', 
-            top: 0, 
-            left: 0, 
-            right: 0, 
-            bottom: 0, 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center',
-            background: 'rgba(255,200,200,0.8)',
-            zIndex: 10,
-            padding: '20px',
-            textAlign: 'center'
-          }}
-        >
-          <div>
-            <div style={{ fontSize: '24px', color: '#e53e3e', marginBottom: '10px' }}>⚠️</div>
-            <div style={{ fontWeight: 'bold', color: '#e53e3e' }}>{error}</div>
-            <div style={{ fontSize: '14px', color: '#742a2a', marginTop: '5px' }}>
-              Please check if the PDB ID is valid or try again later.
-            </div>
+        <div className="absolute inset-0 flex items-center justify-center bg-red-50 z-10">
+          <div className="text-center p-4">
+            <div className="text-red-500 text-3xl mb-2">⚠️</div>
+            <div className="text-red-700 font-bold">{error}</div>
+            <div className="text-sm text-red-600 mt-2">Please check if the PDB ID is valid or try again later.</div>
           </div>
         </div>
       )}
-      
-      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-70 z-10">
+          <div className="text-center">
+            <div className="inline-block w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-2"></div>
+            <p className="text-gray-700">Loading structure...</p>
+          </div>
+        </div>
+      )}
     </div>
   );
-}
+});
 
-// Wrap with ClientOnly to prevent SSR issues
-export default function StructureViewer(props: StructureViewerProps) {
-  return (
-    <ClientOnly fallback={
-      <div 
-        style={{ 
-          width: props.width || '100%', 
-          height: props.height || '400px',
-          background: '#f1f1f1',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          borderRadius: '4px'
-        }}
-      >
-        <div>Loading viewer...</div>
-      </div>
-    }>
-      <MolstarViewer {...props} />
-    </ClientOnly>
-  );
-}
+StructureViewer.displayName = 'StructureViewer';
+
+export default StructureViewer;

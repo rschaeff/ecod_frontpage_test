@@ -1,12 +1,24 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import {
   Database, Search, Home, Download, HelpCircle, ExternalLink,
   Menu, X, ChevronRight, Info, ArrowRight, Share2, AlertCircle,
-  Eye, Maximize2, RotateCw, ZoomIn, ZoomOut
+  Eye, Maximize2, RotateCw, ZoomIn, ZoomOut, Settings, Sliders
 } from 'lucide-react';
+import ClientOnly from '@/components/ClientOnly';
+import dynamic from 'next/dynamic';
+
+// Dynamically import the heavy visualization components to improve page load time
+const StructureViewer = dynamic(() => import('@/components/StructureViewer'), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-80 bg-gray-100 animate-pulse flex items-center justify-center">
+      <div className="text-gray-500">Loading 3D viewer...</div>
+    </div>
+  )
+});
 
 // Types
 interface DomainClassification {
@@ -39,6 +51,24 @@ interface Protein {
   method: string;       // Experimental method
 }
 
+interface Ligand {
+  id: string;
+  name: string;
+  count: number;
+}
+
+interface PfamMapping {
+  id: string;
+  name: string;
+  evalue: number;
+}
+
+interface SimilarDomain {
+  id: string;
+  similarity: number;
+  description: string;
+}
+
 interface DomainData {
   id: string;             // Domain ID (e.g., e4ubpA1)
   pdbId: string;          // PDB ID component
@@ -52,21 +82,9 @@ interface DomainData {
   classification: DomainClassification;
   protein: Protein;       // Parent protein info
   representativeFor: string; // F-group or null if not representative
-  similar: {              // Similar domains
-    id: string;
-    similarity: number;   // Percentage similarity
-    description: string;
-  }[];
-  pfam: {                 // Pfam mappings
-    id: string;
-    name: string;
-    evalue: number;
-  }[];
-  ligands: {              // Bound ligands
-    id: string;
-    name: string;
-    count: number;
-  }[];
+  similar: SimilarDomain[];  // Similar domains
+  pfam: PfamMapping[];    // Pfam mappings
+  ligands: Ligand[];      // Bound ligands
 }
 
 interface DomainPageParams {
@@ -75,26 +93,150 @@ interface DomainPageParams {
   };
 }
 
+interface ViewerOptions {
+  style: 'cartoon' | 'ball-and-stick' | 'surface' | 'spacefill';
+  colorScheme: 'chain' | 'secondary-structure' | 'residue-type' | 'hydrophobicity';
+  showSideChains: boolean;
+  showLigands: boolean;
+  showWater: boolean;
+  quality: 'low' | 'medium' | 'high';
+}
+
+// Nightingale SequenceViewer component
+function SequenceViewer({
+  sequence,
+  rangeStart,
+  highlights = [],
+  onPositionSelect,
+  highlightedPosition = null
+}) {
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    if (!containerRef.current || !sequence) return;
+
+    // In a real implementation, this would initialize the Nightingale SequenceViewer
+    // For now, we'll create a simple sequence viewer
+    const container = containerRef.current;
+    container.innerHTML = '';
+
+    // Create the sequence display
+    const sequenceContainer = document.createElement('div');
+    sequenceContainer.className = 'sequence-display font-mono text-sm leading-relaxed whitespace-pre';
+
+    // Format sequence with 10 chars per group and 5 groups per line
+    const charsPerLine = 50;
+    const charsPerGroup = 10;
+    const lines = Math.ceil(sequence.length / charsPerLine);
+
+    for (let line = 0; line < lines; line++) {
+      const lineStart = line * charsPerLine;
+      const lineChars = sequence.slice(lineStart, lineStart + charsPerLine);
+      const lineDiv = document.createElement('div');
+      lineDiv.className = 'flex mb-1';
+
+      // Position number at start of line
+      const startNumberDiv = document.createElement('div');
+      startNumberDiv.className = 'w-12 text-right pr-2 font-medium text-gray-500';
+      startNumberDiv.textContent = String(rangeStart + lineStart);
+      lineDiv.appendChild(startNumberDiv);
+
+      // Sequence for this line
+      const seqDiv = document.createElement('div');
+      seqDiv.className = 'flex-1';
+
+      // Group characters and create spans for each group
+      for (let i = 0; i < lineChars.length; i += charsPerGroup) {
+        const group = lineChars.slice(i, i + charsPerGroup);
+
+        // Create a group with individual character spans
+        const groupSpan = document.createElement('span');
+        groupSpan.className = 'mr-1';
+
+        for (let j = 0; j < group.length; j++) {
+          const position = lineStart + i + j;
+          const char = group[j];
+          const charSpan = document.createElement('span');
+
+          // Style based on highlights and selections
+          const highlight = highlights.find(h =>
+            position >= h.start - rangeStart && position <= h.end - rangeStart
+          );
+
+          const isSelected = highlightedPosition === position + rangeStart;
+
+          if (isSelected) {
+            charSpan.className = 'inline-block px-0.5 bg-yellow-300 text-black font-bold';
+          } else if (highlight) {
+            charSpan.className = `inline-block px-0.5 font-medium ${highlight.className || ''}`;
+            charSpan.style.backgroundColor = highlight.color || '#4285F4';
+            charSpan.style.color = 'white';
+          } else {
+            charSpan.className = 'inline-block px-0.5';
+          }
+
+          // Add click handler for selection
+          charSpan.addEventListener('click', () => {
+            if (onPositionSelect) onPositionSelect(position + rangeStart);
+          });
+
+          charSpan.textContent = char;
+          groupSpan.appendChild(charSpan);
+        }
+
+        seqDiv.appendChild(groupSpan);
+      }
+
+      lineDiv.appendChild(seqDiv);
+
+      // Position number at end of line
+      const endNumberDiv = document.createElement('div');
+      endNumberDiv.className = 'w-12 text-left pl-2 text-gray-500';
+      endNumberDiv.textContent = String(Math.min(rangeStart + lineStart + lineChars.length - 1, rangeStart + sequence.length - 1));
+      lineDiv.appendChild(endNumberDiv);
+
+      sequenceContainer.appendChild(lineDiv);
+    }
+
+    container.appendChild(sequenceContainer);
+  }, [sequence, rangeStart, highlights, highlightedPosition]);
+
+  return (
+    <div className="sequence-viewer w-full overflow-x-auto" ref={containerRef}>
+      {/* Initial loading state */}
+      {!sequence && <div className="h-40 bg-gray-100 animate-pulse"></div>}
+    </div>
+  );
+}
+
+// Main component
 export default function DomainDetailPage({ params }: DomainPageParams) {
   const [loading, setLoading] = useState<boolean>(true);
   const [domain, setDomain] = useState<DomainData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
-  const [viewerOptions, setViewerOptions] = useState({
-    style: 'cartoon' as const,
+  const [selectedPosition, setSelectedPosition] = useState<number | null>(null);
+  const [structureLoaded, setStructureLoaded] = useState<boolean>(false);
+  const [viewerOptions, setViewerOptions] = useState<ViewerOptions>({
+    style: 'cartoon',
+    colorScheme: 'chain',
     showSideChains: false,
-    showLigands: true
+    showLigands: true,
+    showWater: false,
+    quality: 'medium'
   });
+
+  // Store refs to visualization components for method access
+  const structureViewerRef = useRef(null);
 
   // Fetch domain data based on ID
   useEffect(() => {
     setLoading(true);
 
     // In a real implementation, this would fetch data from your API
-    // For demo, let's simulate a delay and return mock data
+    // For demo, we'll simulate a delay and return mock data
     const timer = setTimeout(() => {
-      // Extract components of the domain ID
-      // Format is typically e[PDBID][Chain][Number], e.g., e4ubpA1
+      // Extract components from domain ID (format typically e[PDBID][Chain][Number], e.g., e4ubpA1)
       const id = params.id;
       let pdbId = '';
       let chainId = '';
@@ -192,6 +334,40 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
     return () => clearTimeout(timer);
   }, [params.id]);
 
+  // Handle structure loading completion
+  const handleStructureLoaded = () => {
+    setStructureLoaded(true);
+  };
+
+  // Handle structure loading error
+  const handleStructureError = (err) => {
+    console.error("Error loading structure:", err);
+    // We don't set the main error state, just log it since we can still show other data
+  };
+
+  // Handle selection of a position in the sequence viewer
+  const handleSequencePositionSelect = (position) => {
+    setSelectedPosition(position);
+
+    // Highlight the residue in the structure viewer if it's available
+    if (structureViewerRef.current && structureViewerRef.current.highlightResidue) {
+      structureViewerRef.current.highlightResidue(position);
+    }
+  };
+
+  // Handle selection of a residue in the structure viewer
+  const handleStructureResidueSelect = (position) => {
+    setSelectedPosition(position);
+  };
+
+  // Update viewer options
+  const updateViewerOptions = (newOptions) => {
+    setViewerOptions(prev => ({
+      ...prev,
+      ...newOptions
+    }));
+  };
+
   // If loading, show a loading state
   if (loading) {
     return (
@@ -212,7 +388,7 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
 
         <main className="flex-grow flex items-center justify-center">
           <div className="p-8 text-center">
-            <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mb-4"></div>
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-solid border-blue-500 border-t-transparent mb-4"></div>
             <h2 className="text-xl font-semibold text-gray-700">Loading Domain Data</h2>
             <p className="text-gray-500 mt-2">
               Retrieving information for {params.id}...
@@ -426,179 +602,113 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
           </div>
         </section>
 
-        {/* Main content grid */}
+        {/* Main content - Structure and Sequence visualization */}
         <section className="pb-8">
           <div className="container mx-auto px-4">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Left column - Structure viewer and classification */}
+              {/* Left column - Domain visualization controls and classification */}
               <div className="lg:col-span-1">
-                {/* Domain structure viewer */}
-                <div className="bg-white rounded-lg shadow-md overflow-hidden">
-                  <div className="p-3 bg-gray-50 border-b flex justify-between items-center">
-                    <h3 className="font-medium">Domain Structure</h3>
-                    <div className="flex space-x-1">
-                      <button className="p-1 rounded hover:bg-gray-200" title="Zoom In">
-                        <ZoomIn className="h-4 w-4 text-gray-700" />
-                      </button>
-                      <button className="p-1 rounded hover:bg-gray-200" title="Rotate">
-                        <RotateCw className="h-4 w-4 text-gray-700" />
-                      </button>
-                      <button className="p-1 rounded hover:bg-gray-200" title="Fullscreen">
-                        <Maximize2 className="h-4 w-4 text-gray-700" />
-                      </button>
-                    </div>
+                {/* Visualization Controls */}
+                <div className="bg-white rounded-lg shadow-md p-4 mb-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-medium">Visualization Controls</h3>
+                    <button className="p-1 rounded hover:bg-gray-100" title="Reset to defaults">
+                      <RotateCw className="h-4 w-4 text-gray-600" />
+                    </button>
                   </div>
 
-                  {/* Domain 3D visualization (mock) */}
-                  <div className="aspect-square bg-gray-100 flex items-center justify-center relative">
-                    {/* Mock structure visualization */}
-                    <div className="w-56 h-56 relative flex items-center justify-center">
-                      <svg viewBox="0 0 200 200" width="200" height="200">
-                        {/* Stylized representation of a protein domain */}
-                        <g transform="translate(100,100)">
-                          {/* Alpha helices */}
-                          <path
-                            d="M-50,-30 C-55,-50 -35,-60 -20,-50 C-10,-45 -5,-30 -15,-20 C-25,-10 -40,-15 -50,-30Z"
-                            fill="#4285F4"
-                            stroke="#2A56C6"
-                            strokeWidth="1.5"
-                          />
-                          <path
-                            d="M-10,0 C-20,15 -10,35 10,40 C25,42 35,30 30,15 C25,0 10,-5 -10,0Z"
-                            fill="#4285F4"
-                            stroke="#2A56C6"
-                            strokeWidth="1.5"
-                          />
-                          <path
-                            d="M-20,-15 C-15,-5 -5,0 10,-5 C20,-10 20,-25 10,-35 C0,-40 -25,-25 -20,-15Z"
-                            fill="#4285F4"
-                            stroke="#2A56C6"
-                            strokeWidth="1.5"
-                          />
-                          {/* Beta strands */}
-                          <path
-                            d="M15,-40 L40,-30 L40,-10 L15,-20 Z"
-                            fill="#EA4335"
-                            stroke="#B31412"
-                            strokeWidth="1.5"
-                          />
-                          <path
-                            d="M20,-15 L45,-5 L45,15 L20,5 Z"
-                            fill="#EA4335"
-                            stroke="#B31412"
-                            strokeWidth="1.5"
-                          />
-                          <path
-                            d="M15,10 L40,20 L40,40 L15,30 Z"
-                            fill="#EA4335"
-                            stroke="#B31412"
-                            strokeWidth="1.5"
-                          />
-                          {/* Connecting loops */}
-                          <path
-                            d="M-20,-15 Q0,-30 15,-40"
-                            fill="none"
-                            stroke="#AAAAAA"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeDasharray="2,2"
-                          />
-                          <path
-                            d="M15,-20 Q5,-25 20,-15"
-                            fill="none"
-                            stroke="#AAAAAA"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeDasharray="2,2"
-                          />
-                          <path
-                            d="M20,5 Q0,10 15,10"
-                            fill="none"
-                            stroke="#AAAAAA"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeDasharray="2,2"
-                          />
-                          <path
-                            d="M-10,0 Q-25,-5 -15,-20"
-                            fill="none"
-                            stroke="#AAAAAA"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeDasharray="2,2"
-                          />
-                          <path
-                            d="M15,30 Q0,35 10,40"
-                            fill="none"
-                            stroke="#AAAAAA"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeDasharray="2,2"
-                          />
-
-                          {/* Ligand (if any) */}
-                          {domain.ligands.length > 0 && (
-                            <g transform="translate(30,-15)">
-                              <rect x="-10" y="-5" width="20" height="10" fill="#FBBC05" stroke="#EA8600" />
-                              <text x="0" y="2" textAnchor="middle" fontSize="6" fill="#000">DNA</text>
-                            </g>
-                          )}
-
-                          {/* N and C terminus labels */}
-                          <text x="-55" y="-35" fontSize="10" fontWeight="bold">N</text>
-                          <text x="25" y="45" fontSize="10" fontWeight="bold">C</text>
-                        </g>
-                      </svg>
-                    </div>
+                  {/* Style selector */}
+                  <div className="mb-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Display Style</label>
+                    <select
+                      className="w-full border rounded px-3 py-1.5 text-sm"
+                      value={viewerOptions.style}
+                      onChange={e => updateViewerOptions({ style: e.target.value as any })}
+                    >
+                      <option value="cartoon">Cartoon</option>
+                      <option value="ball-and-stick">Ball & Stick</option>
+                      <option value="surface">Surface</option>
+                      <option value="spacefill">Spacefill</option>
+                    </select>
                   </div>
 
-                  {/* Structure viewer controls */}
-                  <div className="p-2 bg-gray-50 border-t flex justify-between items-center text-sm">
-                    <div>
-                      <select
-                        className="border rounded px-2 py-1 text-xs bg-white"
-                        value={viewerOptions.style}
-                        onChange={(e) => setViewerOptions({
-                          ...viewerOptions,
-                          style: e.target.value as 'cartoon'
-                        })}
-                      >
-                        <option value="cartoon">Cartoon</option>
-                        <option value="surface">Surface</option>
-                        <option value="ballAndStick">Ball & Stick</option>
-                      </select>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                      <label className="flex items-center">
-                        <input
-                          type="checkbox"
-                          className="mr-1"
-                          checked={viewerOptions.showSideChains}
-                          onChange={(e) => setViewerOptions({
-                            ...viewerOptions,
-                            showSideChains: e.target.checked
-                          })}
-                        />
-                        <span className="text-xs">Side chains</span>
+                  {/* Color scheme */}
+                  <div className="mb-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Color Scheme</label>
+                    <select
+                      className="w-full border rounded px-3 py-1.5 text-sm"
+                      value={viewerOptions.colorScheme}
+                      onChange={e => updateViewerOptions({ colorScheme: e.target.value as any })}
+                    >
+                      <option value="chain">Chain</option>
+                      <option value="secondary-structure">Secondary Structure</option>
+                      <option value="residue-type">Residue Type</option>
+                      <option value="hydrophobicity">Hydrophobicity</option>
+                    </select>
+                  </div>
+
+                  {/* Quality selector */}
+                  <div className="mb-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Rendering Quality
+                      <span className="text-xs text-gray-500 ml-1">(for performance)</span>
+                    </label>
+                    <select
+                      className="w-full border rounded px-3 py-1.5 text-sm"
+                      value={viewerOptions.quality}
+                      onChange={e => updateViewerOptions({ quality: e.target.value as any })}
+                    >
+                      <option value="low">Low (Faster)</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High (Slower)</option>
+                    </select>
+                  </div>
+
+                  {/* Toggle options */}
+                  <div className="space-y-2">
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        id="showSideChains"
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                        checked={viewerOptions.showSideChains}
+                        onChange={e => updateViewerOptions({ showSideChains: e.target.checked })}
+                      />
+                      <label htmlFor="showSideChains" className="ml-2 text-sm text-gray-700">
+                        Show side chains
                       </label>
-                      <label className="flex items-center">
-                        <input
-                          type="checkbox"
-                          className="mr-1"
-                          checked={viewerOptions.showLigands}
-                          onChange={(e) => setViewerOptions({
-                            ...viewerOptions,
-                            showLigands: e.target.checked
-                          })}
-                        />
-                        <span className="text-xs">Ligands</span>
+                    </div>
+
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        id="showLigands"
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                        checked={viewerOptions.showLigands}
+                        onChange={e => updateViewerOptions({ showLigands: e.target.checked })}
+                      />
+                      <label htmlFor="showLigands" className="ml-2 text-sm text-gray-700">
+                        Show ligands
+                      </label>
+                    </div>
+
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        id="showWater"
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                        checked={viewerOptions.showWater}
+                        onChange={e => updateViewerOptions({ showWater: e.target.checked })}
+                      />
+                      <label htmlFor="showWater" className="ml-2 text-sm text-gray-700">
+                        Show water molecules
                       </label>
                     </div>
                   </div>
                 </div>
 
                 {/* ECOD Classification */}
-                <div className="mt-4 bg-white rounded-lg shadow-md p-4">
+                <div className="bg-white rounded-lg shadow-md p-4">
                   <h3 className="font-medium mb-3">ECOD Classification</h3>
                   <div className="space-y-3">
                     <div className="flex items-center">
@@ -695,81 +805,92 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
                 )}
               </div>
 
-              {/* Right column - Domain details and sequence */}
+              {/* Right column - Structure and sequence viewers */}
               <div className="lg:col-span-2">
-                {/* Domain in protein context */}
-                <div className="bg-white rounded-lg shadow-md p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-lg font-medium">Domain in Protein Context</h3>
-                    <Link
-                      href={`/protein/${domain.protein.id}`}
-                      className="text-sm text-blue-600 hover:underline flex items-center"
-                    >
-                      View full protein
-                      <ArrowRight className="h-3 w-3 ml-1" />
-                    </Link>
+                {/* Structure viewer */}
+                <div className="bg-white rounded-lg shadow-md overflow-hidden mb-6">
+                  <div className="bg-gray-50 p-3 border-b flex justify-between items-center">
+                    <h3 className="font-medium">3D Structure</h3>
+                    <div className="flex space-x-1">
+                      <button className="p-1 rounded hover:bg-gray-200" title="Zoom In">
+                        <ZoomIn className="h-4 w-4 text-gray-700" />
+                      </button>
+                      <button className="p-1 rounded hover:bg-gray-200" title="Rotate">
+                        <RotateCw className="h-4 w-4 text-gray-700" />
+                      </button>
+                      <button className="p-1 rounded hover:bg-gray-200" title="Fullscreen">
+                        <Maximize2 className="h-4 w-4 text-gray-700" />
+                      </button>
+                    </div>
                   </div>
 
-                  {/* Protein architecture visualization */}
-                  <div className="relative h-16 mb-6 bg-gray-50 p-3 rounded-lg">
-                    {/* Protein backbone */}
-                    <div className="absolute top-8 left-0 right-0 h-1.5 bg-gray-300 rounded-full"></div>
+                  <div className="p-0">
+                    <ClientOnly>
+                      <div className="h-96 bg-gray-50 relative">
+                          <StructureViewer
+                            ref={structureViewerRef}
+                            pdbId={domain.pdbId}
+                            style={viewerOptions.style}
+                            colorScheme={viewerOptions.colorScheme as any}
+                            showSideChains={viewerOptions.showSideChains}
+                            showLigands={viewerOptions.showLigands}
+                            showWater={viewerOptions.showWater}
+                            quality={viewerOptions.quality as any}
+                            highlights={[{
+                              start: domain.rangeStart,
+                              end: domain.rangeEnd,
+                              chainId: domain.chainId,
+                              color: '#FF5722'
+                            }]}
+                            selectedPosition={selectedPosition}
+                            onResidueSelect={handleStructureResidueSelect}
+                            onLoaded={handleStructureLoaded}
+                            onError={handleStructureError}
+                          />
 
-                    {/* N and C terminus labels */}
-                    <div className="absolute top-8 -left-4 transform -translate-y-1/2 font-bold text-xs">N</div>
-                    <div className="absolute top-8 -right-4 transform -translate-y-1/2 font-bold text-xs">C</div>
+                        {!structureLoaded && (
+                          <div className="absolute inset-0 bg-gray-100 bg-opacity-75 flex items-center justify-center">
+                            <div className="text-center">
+                              <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-solid border-blue-500 border-t-transparent mb-2"></div>
+                              <p className="text-gray-700">Loading structure...</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </ClientOnly>
+                  </div>
 
-                    {/* Current domain highlight */}
-                    <div
-                      className="absolute h-6 rounded-md bg-blue-500 border-2 border-blue-700"
-                      style={{
-                        top: '24px',
-                        left: `${(domain.rangeStart / domain.protein.length) * 100}%`,
-                        width: `${((domain.rangeEnd - domain.rangeStart + 1) / domain.protein.length) * 100}%`,
-                      }}
-                    >
-                      <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 text-xs font-medium whitespace-nowrap text-blue-800">
-                        {domain.range}
+                  {/* Structure related metadata/info */}
+                  {domain.ligands.length > 0 && (
+                    <div className="bg-yellow-50 p-3 border-t">
+                      <div className="text-sm flex items-center">
+                        <Info className="h-4 w-4 text-yellow-600 mr-2" />
+                        <span className="font-medium text-yellow-800">Ligand Information:</span>
+                        <div className="ml-2 flex flex-wrap gap-1">
+                          {domain.ligands.map(ligand => (
+                            <span key={ligand.id} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                              {ligand.name} ({ligand.id})
+                              {ligand.count > 1 && <span className="ml-1">×{ligand.count}</span>}
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     </div>
-
-                    {/* Other domains (mockup) */}
-                    {domain.domainNum === 1 && (
-                      <div
-                        className="absolute h-6 rounded-md bg-red-500"
-                        style={{
-                          top: '24px',
-                          left: `${(253 / domain.protein.length) * 100}%`,
-                          width: `${((339 - 253 + 1) / domain.protein.length) * 100}%`,
-                        }}
-                      ></div>
-                    )}
-                    {domain.domainNum === 2 && (
-                      <div
-                        className="absolute h-6 rounded-md bg-green-500"
-                        style={{
-                          top: '24px',
-                          left: `${(159 / domain.protein.length) * 100}%`,
-                          width: `${((252 - 159 + 1) / domain.protein.length) * 100}%`,
-                        }}
-                      ></div>
-                    )}
-                  </div>
-
-                  <div className="flex items-start space-x-2 text-sm">
-                    <Info className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
-                    <p className="text-gray-600">
-                      This domain is located at residues <strong>{domain.range}</strong> of the full protein structure,
-                      which is <strong>{domain.protein.length}</strong> residues in length.
-                    </p>
-                  </div>
+                  )}
                 </div>
 
-                {/* Domain sequence */}
-                <div className="mt-6 bg-white rounded-lg shadow-md p-4">
+                {/* Sequence viewer */}
+                <div className="bg-white rounded-lg shadow-md p-4">
                   <div className="flex justify-between items-center mb-3">
-                    <h3 className="text-lg font-medium">Domain Sequence</h3>
-                    <div>
+                    <h3 className="font-medium">Domain Sequence</h3>
+                    <div className="flex items-center">
+                      <button
+                        className="bg-blue-50 hover:bg-blue-100 text-blue-600 px-3 py-1 rounded text-sm mr-2 border border-blue-200 flex items-center"
+                        onClick={() => setSelectedPosition(null)}
+                      >
+                        <Eye className="h-3 w-3 mr-1" />
+                        Clear selection
+                      </button>
                       <button className="bg-blue-50 hover:bg-blue-100 text-blue-600 px-3 py-1 rounded text-sm border border-blue-200">
                         <Download className="inline-block h-3 w-3 mr-1" />
                         FASTA
@@ -777,36 +898,51 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
                     </div>
                   </div>
 
-                  {/* Sequence display */}
-                  <div className="bg-gray-50 p-3 rounded border overflow-x-auto">
-                    <div className="font-mono text-sm leading-relaxed whitespace-pre">
-                      {/* Format sequence with 10 chars per group and 5 groups per line */}
-                      {Array.from({ length: Math.ceil(domain.sequence.length / 50) }).map((_, lineIndex) => {
-                        const start = lineIndex * 50;
-                        const lineChars = domain.sequence.slice(start, start + 50);
-                        const formattedGroups = [];
-
-                        // Group by 10 characters
-                        for (let i = 0; i < lineChars.length; i += 10) {
-                          formattedGroups.push(lineChars.slice(i, i + 10));
+                  <div className="bg-gray-50 rounded border overflow-x-auto">
+                    <NightingaleSequenceViewer
+                      sequence={domain.sequence}
+                      rangeStart={domain.rangeStart}
+                      highlights={[
+                        {
+                          start: domain.rangeStart,
+                          end: domain.rangeEnd,
+                          color: '#4285F4',
+                          className: 'domain-highlight'
                         }
-
-                        return (
-                          <div key={lineIndex} className="flex mb-1">
-                            <div className="w-12 text-right pr-2 font-medium text-gray-500">
-                              {domain.rangeStart + start}
-                            </div>
-                            <div>
-                              {formattedGroups.join(' ')}
-                            </div>
-                            <div className="w-12 text-left pl-2 text-gray-500">
-                              {Math.min(domain.rangeStart + start + lineChars.length - 1, domain.rangeEnd)}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                      ]}
+                      features={domain.ligands.map(ligand => ({
+                        type: 'ligand',
+                        start: domain.rangeStart + Math.floor(Math.random() * domain.sequence.length), // For demo, in real app use actual binding sites
+                        end: domain.rangeStart + Math.floor(Math.random() * domain.sequence.length),
+                        color: '#FBBC05',
+                        description: `${ligand.name} binding site`
+                      }))}
+                      onPositionSelect={handleSequencePositionSelect}
+                      highlightedPosition={selectedPosition}
+                      showNumbering={true}
+                      showAxis={true}
+                      displayFormat="wrap"
+                      residuesPerLine={50}
+                      renderingMode="default"
+                      displayHeight={200}
+                      colorMapping={{
+                        'A': '#80A0F0', 'R': '#00007C', 'N': '#00007C', 'D': '#A00042',
+                        'C': '#F08080', 'Q': '#00007C', 'E': '#A00042', 'G': '#F09048',
+                        'H': '#00007C', 'I': '#80A0F0', 'L': '#80A0F0', 'K': '#00007C',
+                        'M': '#80A0F0', 'F': '#80A0F0', 'P': '#C040C0', 'S': '#00007C',
+                        'T': '#00007C', 'W': '#80A0F0', 'Y': '#80A0F0', 'V': '#80A0F0'
+                      }}
+                    />
                   </div>
+
+                  {selectedPosition && (
+                    <div className="mt-2 p-2 bg-blue-50 text-sm rounded">
+                      <span className="font-medium">Selected position:</span> {selectedPosition}
+                      <span className="ml-2 text-gray-500">
+                        (Residue {domain.sequence[selectedPosition - domain.rangeStart]})
+                      </span>
+                    </div>
+                  )}
 
                   {/* Sequence stats */}
                   <div className="mt-3 flex flex-wrap gap-4 text-sm text-gray-600">
