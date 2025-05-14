@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState } from 'react';
 import { Search, Home, Download, Database, HelpCircle, ExternalLink, Menu, X, FileSearch } from 'lucide-react';
 
