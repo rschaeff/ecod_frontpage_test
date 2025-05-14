@@ -1081,7 +1081,7 @@ export default function ManualRepresentativeView({ params }: RepresentativePageP
               </div>
             )}
             
-            {/* Associated Domains Tab */}
+            {/* Associated Domains Tab - Enhanced with Pagination and Column Sorting */}
             {activeTab === 'children' && (
               <div>
                 <div className="bg-white rounded-lg shadow-md">
@@ -1089,15 +1089,16 @@ export default function ManualRepresentativeView({ params }: RepresentativePageP
                   <div className="p-4 border-b">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                       <div className="text-sm text-gray-600">
-                        Showing <span className="font-medium">{getFilteredChildDomains().length}</span> of <span className="font-medium">{domain.childDomains.length}</span> domains associated with this representative
+                        Showing <span className="font-medium">{paginatedDomains.length}</span> of <span className="font-medium">{filteredDomains.length}</span> domains
+                        (page {currentPage} of {totalPages})
                       </div>
-                      
+
                       <div className="flex flex-wrap gap-2">
                         <div className="flex items-center space-x-2">
                           <label className="flex items-center text-sm">
-                            <input 
-                              type="checkbox" 
-                              className="mr-1" 
+                            <input
+                              type="checkbox"
+                              className="mr-1"
                               checked={childDomainsFilters.showExperimental}
                               onChange={() => setChildDomainsFilters({
                                 ...childDomainsFilters,
@@ -1106,11 +1107,11 @@ export default function ManualRepresentativeView({ params }: RepresentativePageP
                             />
                             <span>Experimental</span>
                           </label>
-                          
+
                           <label className="flex items-center text-sm">
-                            <input 
-                              type="checkbox" 
-                              className="mr-1" 
+                            <input
+                              type="checkbox"
+                              className="mr-1"
                               checked={childDomainsFilters.showTheoretical}
                               onChange={() => setChildDomainsFilters({
                                 ...childDomainsFilters,
@@ -1120,8 +1121,8 @@ export default function ManualRepresentativeView({ params }: RepresentativePageP
                             <span>Theoretical</span>
                           </label>
                         </div>
-                        
-                        <select 
+
+                        <select
                           className="border text-sm rounded px-2 py-1"
                           value={childDomainsFilters.taxonomyFilter}
                           onChange={(e) => setChildDomainsFilters({
@@ -1134,53 +1135,120 @@ export default function ManualRepresentativeView({ params }: RepresentativePageP
                           <option value="archaea">Archaea</option>
                           <option value="eukaryota">Eukaryota</option>
                         </select>
-                        
-                        <select 
+
+                        <select
                           className="border text-sm rounded px-2 py-1"
-                          value={childDomainsFilters.sortBy}
-                          onChange={(e) => setChildDomainsFilters({
-                            ...childDomainsFilters,
-                            sortBy: e.target.value as 'similarity' | 'pdbId' | 'length'
-                          })}
+                          value={itemsPerPage}
+                          onChange={(e) => {
+                            setItemsPerPage(Number(e.target.value));
+                            setCurrentPage(1); // Reset to first page when changing items per page
+                          }}
                         >
-                          <option value="similarity">Sort by similarity</option>
-                          <option value="pdbId">Sort by PDB ID</option>
-                          <option value="length">Sort by length</option>
+                          <option value="10">10 per page</option>
+                          <option value="25">25 per page</option>
+                          <option value="50">50 per page</option>
+                          <option value="100">100 per page</option>
                         </select>
                       </div>
                     </div>
                   </div>
-                  
+
                   {/* Domain list */}
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className="bg-gray-50">
                         <tr>
-                          <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Domain ID
+                          <th
+                            scope="col"
+                            className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                            onClick={() => handleSort('id')}
+                          >
+                            <div className="flex items-center">
+                              Domain ID
+                              {sortConfig.key === 'id' && (
+                                <span className="ml-1">
+                                  {sortConfig.direction === 'ascending' ? '↑' : '↓'}
+                                </span>
+                              )}
+                            </div>
                           </th>
-                          <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            PDB
+                          <th
+                            scope="col"
+                            className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                            onClick={() => handleSort('pdbId')}
+                          >
+                            <div className="flex items-center">
+                              PDB
+                              {sortConfig.key === 'pdbId' && (
+                                <span className="ml-1">
+                                  {sortConfig.direction === 'ascending' ? '↑' : '↓'}
+                                </span>
+                              )}
+                            </div>
                           </th>
-                          <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Title
+                          <th
+                            scope="col"
+                            className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                            onClick={() => handleSort('title')}
+                          >
+                            <div className="flex items-center">
+                              Title
+                              {sortConfig.key === 'title' && (
+                                <span className="ml-1">
+                                  {sortConfig.direction === 'ascending' ? '↑' : '↓'}
+                                </span>
+                              )}
+                            </div>
                           </th>
-                          <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Organism
+                          <th
+                            scope="col"
+                            className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                            onClick={() => handleSort('organism')}
+                          >
+                            <div className="flex items-center">
+                              Organism
+                              {sortConfig.key === 'organism' && (
+                                <span className="ml-1">
+                                  {sortConfig.direction === 'ascending' ? '↑' : '↓'}
+                                </span>
+                              )}
+                            </div>
                           </th>
-                          <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Method
+                          <th
+                            scope="col"
+                            className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                            onClick={() => handleSort('method')}
+                          >
+                            <div className="flex items-center">
+                              Method
+                              {sortConfig.key === 'method' && (
+                                <span className="ml-1">
+                                  {sortConfig.direction === 'ascending' ? '↑' : '↓'}
+                                </span>
+                              )}
+                            </div>
                           </th>
-                          <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Similarity
+                          <th
+                            scope="col"
+                            className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                            onClick={() => handleSort('similarity')}
+                          >
+                            <div className="flex items-center justify-end">
+                              Similarity
+                              {sortConfig.key === 'similarity' && (
+                                <span className="ml-1">
+                                  {sortConfig.direction === 'ascending' ? '↑' : '↓'}
+                                </span>
+                              )}
+                            </div>
                           </th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {getFilteredChildDomains().map((child) => (
+                        {paginatedDomains.map((child) => (
                           <tr key={child.id} className="hover:bg-gray-50">
                             <td className="px-4 py-3 whitespace-nowrap">
-                              <Link 
+                              <Link
                                 href={`/domain/${child.id}`}
                                 className="text-blue-600 hover:underline font-medium"
                               >
@@ -1189,7 +1257,7 @@ export default function ManualRepresentativeView({ params }: RepresentativePageP
                               <div className="text-xs text-gray-500">{child.range}</div>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
-                              <a 
+                              <a
                                 href={`https://www.rcsb.org/structure/${child.pdbId}`}
                                 target="_blank"
                                 rel="noreferrer"
@@ -1219,8 +1287,8 @@ export default function ManualRepresentativeView({ params }: RepresentativePageP
                             <td className="px-4 py-3 text-right whitespace-nowrap">
                               <div className="text-sm font-medium">{child.similarity}%</div>
                               <div className="w-16 h-2 bg-gray-200 rounded-full inline-block">
-                                <div 
-                                  className="h-full bg-green-500 rounded-full" 
+                                <div
+                                  className="h-full bg-green-500 rounded-full"
                                   style={{ width: `${child.similarity}%` }}
                                 ></div>
                               </div>
@@ -1230,9 +1298,9 @@ export default function ManualRepresentativeView({ params }: RepresentativePageP
                       </tbody>
                     </table>
                   </div>
-                  
+
                   {/* Empty state */}
-                  {getFilteredChildDomains().length === 0 && (
+                  {filteredDomains.length === 0 && (
                     <div className="p-8 text-center">
                       <div className="text-gray-400 mb-2">
                         <Filter className="h-12 w-12 mx-auto" />
@@ -1241,6 +1309,85 @@ export default function ManualRepresentativeView({ params }: RepresentativePageP
                       <p className="text-gray-500 text-sm">
                         Try changing the filter settings to see more domains.
                       </p>
+                    </div>
+                  )}
+
+                  {/* Pagination controls */}
+                  {filteredDomains.length > 0 && (
+                    <div className="px-4 py-3 bg-gray-50 border-t flex items-center justify-between">
+                      <div className="flex-1 flex items-center justify-between">
+                        <div className="text-sm text-gray-700">
+                          Showing <span className="font-medium">{indexOfFirstItem + 1}</span> to <span className="font-medium">
+                            {Math.min(indexOfFirstItem + itemsPerPage, filteredDomains.length)}
+                          </span> of <span className="font-medium">{filteredDomains.length}</span> domains
+                        </div>
+                        <div className="flex space-x-1">
+                          <button
+                            onClick={() => setCurrentPage(1)}
+                            disabled={currentPage === 1}
+                            className={`px-3 py-1 rounded ${
+                              currentPage === 1
+                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            <span className="sr-only">First</span>
+                            <span>««</span>
+                          </button>
+                          <button
+                            onClick={() => setCurrentPage(currentPage - 1)}
+                            disabled={currentPage === 1}
+                            className={`px-3 py-1 rounded ${
+                              currentPage === 1
+                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            <span className="sr-only">Previous</span>
+                            <span>«</span>
+                          </button>
+
+                          {/* Page number buttons - just show a few around the current page */}
+                          {paginationRange.map(page => (
+                            <button
+                              key={page}
+                              onClick={() => setCurrentPage(page)}
+                              className={`px-3 py-1 rounded ${
+                                currentPage === page
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                              }`}
+                            >
+                              {page}
+                            </button>
+                          ))}
+
+                          <button
+                            onClick={() => setCurrentPage(currentPage + 1)}
+                            disabled={currentPage === totalPages}
+                            className={`px-3 py-1 rounded ${
+                              currentPage === totalPages
+                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            <span className="sr-only">Next</span>
+                            <span>»</span>
+                          </button>
+                          <button
+                            onClick={() => setCurrentPage(totalPages)}
+                            disabled={currentPage === totalPages}
+                            className={`px-3 py-1 rounded ${
+                              currentPage === totalPages
+                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            <span className="sr-only">Last</span>
+                            <span>»»</span>
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
