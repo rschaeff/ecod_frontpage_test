@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { PluginContext } from 'molstar/lib/mol-plugin/context';
-import { createPluginUI } from 'molstar/lib/mol-plugin-ui/react18';
+import { createPluginUI } from 'molstar/lib/mol-plugin-ui/react';
 import { DefaultPluginUISpec } from 'molstar/lib/mol-plugin-ui/spec';
 import { PresetStructureRepresentations } from 'molstar/lib/mol-plugin-state/builder/structure/representation-preset';
 import { MolScriptBuilder as MS } from 'molstar/lib/mol-script/language/builder';
