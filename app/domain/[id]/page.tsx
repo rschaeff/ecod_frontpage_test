@@ -1,6 +1,6 @@
-import DomainDetailPage from '@/components/DomainDetailPage';
+import DomainDetail from '@/components/DomainDetail';
 
 // Use the refactored component that incorporates modular components
 export default function DomainDetailPage({ params }) {
-  return <DomainDetailPage params={params} />;
+  return <DomainDetail params={params} />;
 }
