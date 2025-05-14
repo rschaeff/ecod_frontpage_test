@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
-import { PluginUIContext } from 'molstar/lib/mol-plugin-ui';
+import { PluginContext } from 'molstar/lib/mol-plugin/context';
+import { createPluginUI } from 'molstar/lib/mol-plugin-ui/react18';
 import { DefaultPluginUISpec } from 'molstar/lib/mol-plugin-ui/spec';
-import { StructureRepresentationPresetProvider } from 'molstar/lib/mol-plugin-state/builder/structure';
+import { PresetStructureRepresentations } from 'molstar/lib/mol-plugin-state/builder/structure/representation-preset';
 import { MolScriptBuilder as MS } from 'molstar/lib/mol-script/language/builder';
 import { StateObjectSelector } from 'molstar/lib/mol-state';
 import { StateTransforms } from 'molstar/lib/mol-plugin-state/transforms';
@@ -65,7 +66,7 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
   onError
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const pluginRef = useRef<PluginUIContext | null>(null);
+  const pluginRef = useRef<PluginContext | null>(null);
   const structureRef = useRef<StateObjectSelector<PluginStateObject.Molecule.Structure> | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -123,13 +124,13 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
     const initMolstar = async () => {
       try {
         // Create a new plugin instance with default spec
-        const plugin = new PluginUIContext(DefaultPluginUISpec());
+        const { plugin, canvas } = await createPluginUI(containerRef.current, {
+          spec: DefaultPluginUISpec()
+        });
 
-        // Initialize the plugin
-        await plugin.init();
         pluginRef.current = plugin;
 
-        // Render the plugin to the container
+        // Initialize the plugin
         if (containerRef.current && !unmounted) {
           plugin.layout.setRoot({ kind: 'canvas3d' });
           plugin.canvas3d?.setProps({
@@ -245,7 +246,7 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
   }, [isInitialized, isLoading, selectedPosition]);
 
   // Load structure from PDB ID
-  const loadStructure = async (plugin: PluginUIContext, id: string) => {
+  const loadStructure = async (plugin: PluginContext, id: string) => {
     try {
       setIsLoading(true);
       setError(null);
@@ -285,7 +286,7 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
   };
 
   // Load structure from URL
-  const loadStructureFromUrl = async (plugin: PluginUIContext, structureUrl: string) => {
+  const loadStructureFromUrl = async (plugin: PluginContext, structureUrl: string) => {
     try {
       setIsLoading(true);
       setError(null);
@@ -328,15 +329,15 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
   const getRepresentationPreset = () => {
     switch (style) {
       case 'cartoon':
-        return StructureRepresentationPresetProvider.cartoon.id;
+        return PresetStructureRepresentations.cartoon.id;
       case 'ball-and-stick':
-        return StructureRepresentationPresetProvider.ball_and_stick.id;
+        return PresetStructureRepresentations.ballAndStick.id;
       case 'surface':
-        return StructureRepresentationPresetProvider.surface.id;
+        return PresetStructureRepresentations.surface.id;
       case 'spacefill':
-        return StructureRepresentationPresetProvider.spacefill.id;
+        return PresetStructureRepresentations.spacefill.id;
       default:
-        return StructureRepresentationPresetProvider.cartoon.id;
+        return PresetStructureRepresentations.cartoon.id;
     }
   };
 
