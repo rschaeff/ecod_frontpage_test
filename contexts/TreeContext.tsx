@@ -168,23 +168,29 @@ export function TreeProvider({ children }: { children: ReactNode }) {
 
   // Load expanded nodes state from localStorage on mount
   useEffect(() => {
-    const savedExpandedNodes = localStorage.getItem('ecodTreeExpandedNodes');
-    if (savedExpandedNodes) {
-      try {
+    // Only run in browser environment
+    if (typeof window === 'undefined') return;
+
+    try {
+      const savedExpandedNodes = localStorage.getItem('ecodTreeExpandedNodes');
+      if (savedExpandedNodes) {
         const parsedNodes = JSON.parse(savedExpandedNodes);
         for (const nodeId in parsedNodes) {
           if (parsedNodes[nodeId]) {
             dispatch({ type: 'EXPAND_NODE', payload: nodeId });
           }
         }
-      } catch (e) {
-        console.error('Error parsing expanded tree nodes:', e);
       }
+    } catch (e) {
+      console.error('Error parsing expanded tree nodes:', e);
     }
   }, []);
 
   // Save expanded nodes to localStorage when they change
   useEffect(() => {
+    // Only run in browser environment
+    if (typeof window === 'undefined') return;
+
     localStorage.setItem('ecodTreeExpandedNodes', JSON.stringify(state.expandedNodes));
   }, [state.expandedNodes]);
 

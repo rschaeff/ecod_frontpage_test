@@ -1,3 +1,5 @@
+'use client';
+
 import { createContext, useContext, useReducer, ReactNode, useEffect } from 'react';
 
 // Types for user preferences
@@ -68,9 +70,12 @@ export function UserPreferencesProvider({ children }: { children: ReactNode }) {
 
   // Load preferences from localStorage on mount
   useEffect(() => {
-    const savedPreferences = localStorage.getItem('ecodUserPreferences');
-    if (savedPreferences) {
-      try {
+    // Only run in browser environment
+    if (typeof window === 'undefined') return;
+
+    try {
+      const savedPreferences = localStorage.getItem('ecodUserPreferences');
+      if (savedPreferences) {
         const parsedPreferences = JSON.parse(savedPreferences);
         // Apply each saved preference
         if (parsedPreferences.theme) {
@@ -82,16 +87,18 @@ export function UserPreferencesProvider({ children }: { children: ReactNode }) {
         if (parsedPreferences.resultsPerPage) {
           dispatch({ type: 'SET_RESULTS_PER_PAGE', payload: parsedPreferences.resultsPerPage });
         }
-        if (parsedPreferences.showExperimentalOnly !== undefined && 
+        if (parsedPreferences.showExperimentalOnly !== undefined &&
             parsedPreferences.showExperimentalOnly !== preferences.showExperimentalOnly) {
           dispatch({ type: 'TOGGLE_EXPERIMENTAL_ONLY' });
         }
-        if (parsedPreferences.advancedMode !== undefined && 
+        if (parsedPreferences.advancedMode !== undefined &&
             parsedPreferences.advancedMode !== preferences.advancedMode) {
           dispatch({ type: 'TOGGLE_ADVANCED_MODE' });
         }
-      } catch (e) {
-        console.error('Error parsing user preferences:', e);
+      }
+    } catch (e) {
+      console.error('Error parsing user preferences:', e);
+      if (typeof window !== 'undefined') {
         localStorage.setItem('ecodUserPreferences', JSON.stringify(initialPreferences));
       }
     }
@@ -99,19 +106,24 @@ export function UserPreferencesProvider({ children }: { children: ReactNode }) {
 
   // Save preferences to localStorage when they change
   useEffect(() => {
+    // Only run in browser environment
+    if (typeof window === 'undefined') return;
+
     localStorage.setItem('ecodUserPreferences', JSON.stringify(preferences));
-    
+
     // Apply theme to document
     if (preferences.theme === 'dark') {
       document.documentElement.classList.add('dark');
     } else if (preferences.theme === 'light') {
       document.documentElement.classList.remove('dark');
     } else {
-      // System preference
-      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
+      // System preference - only run in browser
+      if (typeof window !== 'undefined') {
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
       }
     }
   }, [preferences]);

@@ -103,9 +103,12 @@ export function SearchProvider({ children }: { children: ReactNode }) {
 
   // Load search history from localStorage on mount
   useEffect(() => {
-    const savedHistory = localStorage.getItem('ecodSearchHistory');
-    if (savedHistory) {
-      try {
+    // Only run in browser environment
+    if (typeof window === 'undefined') return;
+
+    try {
+      const savedHistory = localStorage.getItem('ecodSearchHistory');
+      if (savedHistory) {
         const parsedHistory = JSON.parse(savedHistory);
         if (Array.isArray(parsedHistory)) {
           // Initialize history from localStorage
@@ -113,8 +116,10 @@ export function SearchProvider({ children }: { children: ReactNode }) {
             dispatch({ type: 'ADD_TO_HISTORY', payload: query });
           });
         }
-      } catch (e) {
-        console.error('Error parsing search history:', e);
+      }
+    } catch (e) {
+      console.error('Error parsing search history:', e);
+      if (typeof window !== 'undefined') {
         localStorage.setItem('ecodSearchHistory', JSON.stringify([]));
       }
     }
@@ -122,6 +127,9 @@ export function SearchProvider({ children }: { children: ReactNode }) {
 
   // Save search history to localStorage when it changes
   useEffect(() => {
+    // Only run in browser environment
+    if (typeof window === 'undefined') return;
+
     localStorage.setItem('ecodSearchHistory', JSON.stringify(state.searchHistory));
   }, [state.searchHistory]);
 
