@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Search, Database, Download, HelpCircle, FileSearch } from 'lucide-react';
+import { Search, Database, Download, HelpCircle, FileSearch, X } from 'lucide-react'; // Added X icon
 import Link from 'next/link';
 
 // Import modular components
