@@ -1,3 +1,5 @@
+'use client';
+
 import { createContext, useContext, useReducer, ReactNode, useEffect } from 'react';
 
 // Types for tree nodes and state
