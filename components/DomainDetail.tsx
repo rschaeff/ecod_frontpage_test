@@ -21,6 +21,7 @@ import ClientOnly from '@/components/ClientOnly';
 
 // Import context hooks if needed
 import { useUserPreferences } from '@/contexts/UserPreferencesContext';
+import { useContext } from 'react';
 
 // Types
 interface DomainClassification {
@@ -104,10 +105,17 @@ interface DomainPageParams {
   };
 }
 
-export default function DomainDetailPage({ params }: DomainPageParams) {
-  // Access user preferences if needed
-  const { preferences } = useUserPreferences();
-  
+export default function DomainDetail({ params }: DomainPageParams) {
+  // Try to access user preferences if available, but provide fallback for when context is missing
+  let userPreferences = { preferences: {} };
+  try {
+    // We wrap this in a try-catch to avoid the error when the provider is missing
+    userPreferences = useUserPreferences();
+  } catch (error) {
+    // Silently handle the missing context with default values
+    console.warn("UserPreferencesContext not available, using defaults");
+  }
+
   // State definitions
   const [loading, setLoading] = useState<boolean>(true);
   const [domain, setDomain] = useState<DomainData | null>(null);
@@ -122,14 +130,14 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
     showWater: false,
     quality: 'medium'
   });
-  
+
   // Refs for components
   const structureViewerRef = useRef(null);
-  
+
   // Fetch domain data based on ID
   useEffect(() => {
     setLoading(true);
-    
+
     // In a real app, this would be an API call to fetch domain data
     // For now, we simulate with a timeout and mock data
     const timer = setTimeout(() => {
@@ -138,13 +146,13 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
       let pdbId = '';
       let chainId = '';
       let domainNum = 1;
-      
+
       if (id.startsWith('e') && id.length >= 6) {
         pdbId = id.substring(1, 5);
         chainId = id.substring(5, 6);
         domainNum = parseInt(id.substring(6), 10) || 1;
       }
-      
+
       // Sample mock data
       const mockData: DomainData = {
         id: id,
@@ -216,7 +224,7 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
           }
         ] : []
       };
-      
+
       if (id) {
         setDomain(mockData);
         setError(null);
@@ -224,39 +232,39 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
         setError("Invalid domain ID");
         setDomain(null);
       }
-      
+
       setLoading(false);
     }, 1000);
-    
+
     return () => clearTimeout(timer);
   }, [params.id]);
-  
+
   // Handle structure loading completion
   const handleStructureLoaded = () => {
     setStructureLoaded(true);
   };
-  
+
   // Handle structure loading error
   const handleStructureError = (err) => {
     console.error("Error loading structure:", err);
     // We don't set the main error state, just log it since we can still show other data
   };
-  
+
   // Handle selection of a position in the sequence viewer
   const handleSequencePositionSelect = (position) => {
     setHighlightedPosition(position);
-    
+
     // Highlight the residue in the structure viewer if it's available
     if (structureViewerRef.current && structureViewerRef.current.highlightResidue) {
       structureViewerRef.current.highlightResidue(position);
     }
   };
-  
+
   // Handle selection of a residue in the structure viewer
   const handleStructureResidueSelect = (position) => {
     setHighlightedPosition(position);
   };
-  
+
   // Update viewer options
   const updateViewerOptions = (newOptions) => {
     setViewerOptions(prev => ({
@@ -264,7 +272,7 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
       ...newOptions
     }));
   };
-  
+
   // Reset viewer options to defaults
   const resetViewerOptions = () => {
     setViewerOptions({
@@ -276,11 +284,11 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
       quality: 'medium'
     });
   };
-  
+
   // Create breadcrumb items
   const getBreadcrumbs = () => {
     if (!domain) return [];
-    
+
     return [
       { label: 'Home', href: '/' },
       { label: 'Search', href: '/search' },
@@ -288,24 +296,24 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
       { label: domain.id }
     ];
   };
-  
+
   // If loading, show loading state
   if (loading) {
     return (
       <AppLayout
-        title="Loading Domain" 
+        title="Loading Domain"
         activePage="tree"
       >
         <LoadingState message={`Loading domain information for ${params.id}...`} />
       </AppLayout>
     );
   }
-  
+
   // If error, show error state
   if (error || !domain) {
     return (
       <AppLayout
-        title="Domain Not Found" 
+        title="Domain Not Found"
         activePage="tree"
       >
         <ErrorState
@@ -325,7 +333,7 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
       </AppLayout>
     );
   }
-  
+
   // If domain data is loaded, render the domain detail view
   return (
     <AppLayout
@@ -352,14 +360,14 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
                   {domain.protein.name} • {domain.protein.organism}
                 </p>
               </div>
-              
+
               <div className="mt-4 md:mt-0 space-y-1 text-sm text-gray-600">
                 <div><span className="font-medium">Range:</span> {domain.range}</div>
                 <div><span className="font-medium">PDB:</span> {domain.protein.id} (Chain {domain.chainId})</div>
                 <div><span className="font-medium">ECOD:</span> {domain.classification.fgroup.id}</div>
               </div>
             </div>
-            
+
             {/* Parent protein link */}
             <div className="mt-2 mb-4">
               <Link
@@ -371,7 +379,7 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
                 <ArrowRight className="h-4 w-4 ml-2" />
               </Link>
             </div>
-            
+
             <div className="flex flex-wrap gap-2 mt-4">
               <span className="text-sm bg-blue-50 text-blue-700 px-3 py-1 rounded-full border border-blue-200">
                 {domain.classification.architecture}
@@ -397,7 +405,7 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
           </div>
         </div>
       </section>
-      
+
       {/* Main content - Structure and Sequence visualization */}
       <section className="pb-8">
         <div className="container mx-auto px-4">
@@ -405,18 +413,18 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
             {/* Left column - Domain visualization controls and classification */}
             <div className="lg:col-span-1">
               {/* Visualization Controls - using the ControlPanel component */}
-              <ControlPanel 
+              <ControlPanel
                 options={viewerOptions}
                 onChange={updateViewerOptions}
                 onReset={resetViewerOptions}
               />
-              
+
               {/* Domain classification - using the ClassificationDisplay component */}
               <div className="mt-6 bg-white rounded-lg shadow-md p-4">
                 <h3 className="font-medium mb-3">ECOD Classification</h3>
                 <ClassificationDisplay classification={domain.classification} />
               </div>
-              
+
               {/* Pfam Mappings */}
               {domain.pfam.length > 0 && (
                 <div className="mt-4 bg-white rounded-lg shadow-md p-4">
@@ -444,7 +452,7 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
                 </div>
               )}
             </div>
-            
+
             {/* Right column - Structure and sequence viewers */}
             <div className="lg:col-span-2">
               {/* Structure viewer */}
@@ -452,7 +460,7 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
                 <div className="bg-gray-50 p-3 border-b flex justify-between items-center">
                   <h3 className="font-medium">3D Structure</h3>
                 </div>
-                
+
                 <div className="p-0">
                   <ClientOnly>
                     <div className="h-96 bg-gray-50 relative">
@@ -476,7 +484,7 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
                         onLoaded={handleStructureLoaded}
                         onError={handleStructureError}
                       />
-                      
+
                       {!structureLoaded && (
                         <div className="absolute inset-0 bg-gray-100 bg-opacity-75 flex items-center justify-center">
                           <LoadingState message="Loading structure..." size="small" />
@@ -485,7 +493,7 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
                     </div>
                   </ClientOnly>
                 </div>
-                
+
                 {/* Structure related metadata/info */}
                 {domain.ligands.length > 0 && (
                   <div className="bg-yellow-50 p-3 border-t">
@@ -504,7 +512,7 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
                   </div>
                 )}
               </div>
-              
+
               {/* Sequence viewer */}
               <div className="bg-white rounded-lg shadow-md p-4">
                 <div className="flex justify-between items-center mb-3">
@@ -523,7 +531,7 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
                     </button>
                   </div>
                 </div>
-                
+
                 <div className="bg-gray-50 rounded border overflow-x-auto">
                   <SequenceViewer
                     sequence={domain.sequence}
@@ -560,7 +568,7 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
                     }}
                   />
                 </div>
-                
+
                 {highlightedPosition && (
                   <div className="mt-2 p-2 bg-blue-50 text-sm rounded">
                     <span className="font-medium">Selected position:</span> {highlightedPosition}
@@ -569,7 +577,7 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
                     </span>
                   </div>
                 )}
-                
+
                 {/* Sequence stats */}
                 <div className="mt-3 flex flex-wrap gap-4 text-sm text-gray-600">
                   <div>
@@ -580,11 +588,11 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
                   </div>
                 </div>
               </div>
-              
+
               {/* Similar domains */}
               <div className="mt-6 bg-white rounded-lg shadow-md p-4">
                 <h3 className="text-lg font-medium mb-3">Similar Domains</h3>
-                
+
                 <div className="space-y-2">
                   {domain.similar.map(similar => (
                     <DomainCard
@@ -600,7 +608,7 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
                   ))}
                 </div>
               </div>
-              
+
               {/* Download and export section */}
               <div className="mt-6 bg-white rounded-lg shadow-md p-4">
                 <h3 className="text-lg font-medium mb-3">Download & Export</h3>
@@ -609,12 +617,12 @@ export default function DomainDetailPage({ params }: DomainPageParams) {
                     <Download className="h-4 w-4 mr-2" />
                     PDB Structure
                   </button>
-                  
+
                   <button className="flex items-center justify-center bg-blue-50 hover:bg-blue-100 text-blue-600 p-3 rounded border border-blue-200">
                     <Download className="h-4 w-4 mr-2" />
                     FASTA Sequence
                   </button>
-                  
+
                   <button className="flex items-center justify-center bg-blue-50 hover:bg-blue-100 text-blue-600 p-3 rounded border border-blue-200">
                     <Share2 className="h-4 w-4 mr-2" />
                     Citation
