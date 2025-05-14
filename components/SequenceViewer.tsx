@@ -4,7 +4,7 @@ import React, { useEffect, useRef, forwardRef, useImperativeHandle } from 'react
 
 // Nightingale imports
 // When using the actual Nightingale library, you would use:
-// import { SequenceViewer, Track, SequenceRenderer } from 'protvista-nightingale';
+import { SequenceViewer, Track, SequenceRenderer } from 'protvista-nightingale';
 
 // Interfaces for component props
 interface Highlight {
