@@ -123,6 +123,7 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
     if (isInitialized || !containerRef.current) return;
 
     let unmounted = false;
+    let pluginInstance: PluginContext | null = null;
 
     const initMolstar = async () => {
       try {
@@ -133,6 +134,13 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
           render: renderReact18
         });
 
+        if (unmounted) {
+          // If component was unmounted during async initialization
+          if (plugin) plugin.dispose();
+          return;
+        }
+
+        pluginInstance = plugin;
         pluginRef.current = plugin;
 
         // Initialize the plugin
@@ -201,14 +209,24 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
     // Start initialization
     initMolstar();
 
-    // Cleanup
+    // Cleanup function
     return () => {
       unmounted = true;
-      if (pluginRef.current) {
-        pluginRef.current.dispose();
-        pluginRef.current = null;
-        structureRef.current = null;
+
+      // Safely dispose of the plugin
+      if (pluginInstance) {
+        try {
+          // First clear any structures
+          pluginInstance.managers.structure.hierarchy.removeAll();
+          // Then dispose the plugin
+          pluginInstance.dispose();
+        } catch (err) {
+          console.error('Error during cleanup:', err);
+        }
       }
+
+      pluginRef.current = null;
+      structureRef.current = null;
     };
   }, []);
 
