@@ -19,6 +19,7 @@ import { StructureElement } from 'molstar/lib/mol-model/structure/structure';
 interface StructureViewerProps {
   pdbId?: string;
   url?: string;
+  fileData?: string; // Added for direct file content loading
   localBasePath?: string;
   style?: 'cartoon' | 'ball-and-stick' | 'surface' | 'spacefill';
   colorScheme?: 'chain' | 'secondary-structure' | 'residue-type' | 'hydrophobicity';
@@ -43,6 +44,7 @@ interface StructureViewerProps {
 const StructureViewer = forwardRef<any, StructureViewerProps>(({
   pdbId,
   url,
+  fileData,
   localBasePath = '/data/ecod/chain_data',
   style = 'cartoon',
   colorScheme = 'chain',
@@ -230,11 +232,13 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
 
         setIsInitialized(true);
 
-        // Load structure if pdbId or url is provided
+        // Load structure based on provided props
         if (pdbId) {
           loadStructureLocal(plugin, pdbId);
         } else if (url) {
           loadStructureFromUrl(plugin, url);
+        } else if (fileData) {
+          loadStructureFromData(plugin, fileData);
         } else {
           setIsLoading(false);
           if (onLoaded) onLoaded();
@@ -281,19 +285,17 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
     };
   }, []);
 
-  // Load structure when pdbId changes
   useEffect(() => {
-    if (isInitialized && pluginRef.current && pdbId) {
-      loadStructureLocal(pluginRef.current, pdbId);
+    if (isInitialized && pluginRef.current) {
+      if (pdbId) {
+        loadStructureLocal(pluginRef.current, pdbId);
+      } else if (url) {
+        loadStructureFromUrl(pluginRef.current, url);
+      } else if (fileData) {
+        loadStructureFromData(pluginRef.current, fileData);
+      }
     }
-  }, [pdbId, isInitialized]);
-
-  // Load structure from URL when url changes
-  useEffect(() => {
-    if (isInitialized && pluginRef.current && url) {
-      loadStructureFromUrl(pluginRef.current, url);
-    }
-  }, [url, isInitialized]);
+  }, [pdbId, url, fileData, isInitialized]);
 
   // Update visualization when style, highlights, or options change
   useEffect(() => {
@@ -434,7 +436,7 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
     }
   };
 
-  // Load structure from URL
+  // Load structure from URL (especially useful for testing with public repositories)
   const loadStructureFromUrl = async (plugin: PluginContext, structureUrl: string) => {
     try {
       setIsLoading(true);
@@ -446,29 +448,71 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
         structureRef.current = null;
       }
 
-      // Determine format based on URL extension
-      const format = structureUrl.toLowerCase().endsWith('.pdb') ? 'pdb' : 'mmcif';
+      console.log(`Loading structure from URL: ${structureUrl}`);
 
-      // Create a download component
-      const data = await plugin.builders.data.download({ url: structureUrl, isBinary: false }, { state: { isGhost: true } });
-      const trajectory = await plugin.builders.structure.parseTrajectory(data, format);
+      try {
+        // Use the more robust hierarchy approach
+        await plugin.builders.structure.hierarchy.applyPreset(
+          await plugin.builders.structure.parseTrajectory(
+            await plugin.builders.data.download({ url: structureUrl, isBinary: false })
+          ),
+          'default'
+        );
 
-      // Create the molecular structure
-      const model = await plugin.builders.structure.createModel(trajectory);
-      const structure = await plugin.builders.structure.createStructure(model);
-
-      // Store the structure reference
-      structureRef.current = structure;
-
-      // Apply initial visualization
-      await updateVisualization();
-
-      // Set loading complete
-      setIsLoading(false);
-      if (onLoaded) onLoaded();
+        console.log('Structure loaded successfully from URL');
+        setIsLoading(false);
+        if (onLoaded) onLoaded();
+      } catch (err) {
+        console.error('Error loading structure from URL:', err);
+        setError(`Failed to load structure from URL: ${err.message || 'Unknown error'}`);
+        setIsLoading(false);
+        if (onError) onError(err as Error);
+      }
     } catch (err) {
-      console.error('Error loading structure from URL:', err);
-      setError('Failed to load structure');
+      console.error('Error in loadStructureFromUrl:', err);
+      setError(`Failed to load structure: ${err.message || 'Unknown error'}`);
+      setIsLoading(false);
+      if (onError) onError(err as Error);
+    }
+  };
+
+  // Load structure from file data (for direct uploads)
+  const loadStructureFromData = async (plugin: PluginContext, fileData: string, format: 'pdb' | 'mmcif' = 'pdb') => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // Clear any existing structures
+      if (structureRef.current) {
+        plugin.builders.structure.hierarchy.removeAll();
+        structureRef.current = null;
+      }
+
+      console.log(`Loading structure from data (${format} format)`);
+
+      try {
+        // Create raw data
+        const data = await plugin.builders.data.rawData({
+          data: fileData,
+          label: 'Uploaded structure'
+        });
+
+        // Parse and display
+        const trajectory = await plugin.builders.structure.parseTrajectory(data, format);
+        await plugin.builders.structure.hierarchy.applyPreset(trajectory, 'default');
+
+        console.log('Structure loaded successfully from data');
+        setIsLoading(false);
+        if (onLoaded) onLoaded();
+      } catch (err) {
+        console.error('Error loading structure from data:', err);
+        setError(`Failed to load structure from data: ${err.message || 'Unknown error'}`);
+        setIsLoading(false);
+        if (onError) onError(err as Error);
+      }
+    } catch (err) {
+      console.error('Error in loadStructureFromData:', err);
+      setError(`Failed to load structure: ${err.message || 'Unknown error'}`);
       setIsLoading(false);
       if (onError) onError(err as Error);
     }
