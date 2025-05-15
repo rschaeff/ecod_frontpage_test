@@ -320,6 +320,7 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
     }
     path += '.pdb'; // Assuming PDB format
 
+    console.log(`Generated local path: ${path} for PDB ID: ${pdbId}`);
     return path;
   };
 
@@ -337,31 +338,53 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
 
       // Get the path to the local structure file
       const localPath = getLocalStructurePath(id);
+      console.log(`Attempting to load structure from: ${localPath}`);
 
       // Create a download component
-      const data = await plugin.builders.data.download({ url: localPath, isBinary: false }, { state: { isGhost: true } });
+      try {
+        const data = await plugin.builders.data.download({ url: localPath, isBinary: false }, { state: { isGhost: true } });
+        console.log('Successfully downloaded structure data');
 
-      // Determine format based on file extension
-      const format = localPath.toLowerCase().endsWith('.pdb') ? 'pdb' : 'mmcif';
+        // Determine format based on file extension
+        const format = localPath.toLowerCase().endsWith('.pdb') ? 'pdb' : 'mmcif';
+        console.log(`Using format: ${format}`);
 
-      const trajectory = await plugin.builders.structure.parseTrajectory(data, format);
+        try {
+          const trajectory = await plugin.builders.structure.parseTrajectory(data, format);
+          console.log('Successfully parsed trajectory');
 
-      // Create the molecular structure
-      const model = await plugin.builders.structure.createModel(trajectory);
-      const structure = await plugin.builders.structure.createStructure(model);
+          // Create the molecular structure
+          const model = await plugin.builders.structure.createModel(trajectory);
+          console.log('Successfully created model');
 
-      // Store the structure reference
-      structureRef.current = structure;
+          const structure = await plugin.builders.structure.createStructure(model);
+          console.log('Successfully created structure');
 
-      // Apply initial visualization
-      await updateVisualization();
+          // Store the structure reference
+          structureRef.current = structure;
 
-      // Set loading complete
-      setIsLoading(false);
-      if (onLoaded) onLoaded();
+          // Apply initial visualization
+          await updateVisualization();
+          console.log('Visualization updated');
+
+          // Set loading complete
+          setIsLoading(false);
+          if (onLoaded) onLoaded();
+        } catch (parseErr) {
+          console.error('Error parsing structure data:', parseErr);
+          setError(`Failed to parse structure data: ${parseErr.message}`);
+          setIsLoading(false);
+          if (onError) onError(parseErr);
+        }
+      } catch (downloadErr) {
+        console.error('Error downloading structure from local path:', downloadErr);
+        setError(`Failed to download structure: ${downloadErr.message}`);
+        setIsLoading(false);
+        if (onError) onError(downloadErr);
+      }
     } catch (err) {
-      console.error('Error loading structure from local path:', err);
-      setError(`Failed to load structure: ${err}`);
+      console.error('Error in loadStructureLocal:', err);
+      setError(`Failed to load structure: ${err.message}`);
       setIsLoading(false);
       if (onError) onError(err as Error);
     }

@@ -1,4 +1,3 @@
-// app/test-molstar/page.tsx
 'use client';
 
 import { useState } from 'react';
@@ -10,11 +9,27 @@ export default function TestMolstar() {
   const [showLigands, setShowLigands] = useState(true);
   const [showWater, setShowWater] = useState(false);
   const [localBasePath, setLocalBasePath] = useState('/data/ecod/chain_data');
-  const [useLocalPath, setUseLocalPath] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleError = (err: Error) => {
+    console.error("Structure viewer error:", err);
+    setError(err.message);
+  };
+
+  const handleLoad = () => {
+    console.log("Structure loaded successfully");
+    setError(null);
+  };
 
   return (
     <div className="container mx-auto p-8">
       <h1 className="text-2xl font-bold mb-6">Mol* Structure Viewer Test</h1>
+
+      {error && (
+        <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
+          <strong>Error:</strong> {error}
+        </div>
+      )}
 
       <div className="mb-4 flex flex-wrap gap-4">
         <div>
@@ -41,30 +56,15 @@ export default function TestMolstar() {
           </select>
         </div>
 
-        <div className="flex flex-col">
-          <label className="block text-sm font-medium mb-1">Use Local Repository</label>
-          <label className="flex items-center">
-            <input
-              type="checkbox"
-              checked={useLocalPath}
-              onChange={(e) => setUseLocalPath(e.target.checked)}
-              className="mr-2"
-            />
-            <span>Load from local repository</span>
-          </label>
+        <div className="w-full">
+          <label className="block text-sm font-medium mb-1">Local Base Path</label>
+          <input
+            type="text"
+            value={localBasePath}
+            onChange={(e) => setLocalBasePath(e.target.value)}
+            className="border rounded px-3 py-2 w-full max-w-lg"
+          />
         </div>
-
-        {useLocalPath && (
-          <div className="w-full">
-            <label className="block text-sm font-medium mb-1">Local Base Path</label>
-            <input
-              type="text"
-              value={localBasePath}
-              onChange={(e) => setLocalBasePath(e.target.value)}
-              className="border rounded px-3 py-2 w-full max-w-lg"
-            />
-          </div>
-        )}
       </div>
 
       <div className="mb-4 flex space-x-4">
@@ -95,28 +95,60 @@ export default function TestMolstar() {
         <div style={{ height: '500px' }}>
           <StructureViewer
             pdbId={pdbId}
-            localBasePath={useLocalPath ? localBasePath : undefined}
+            localBasePath={localBasePath}
             style={style as any}
             showLigands={showLigands}
             showWater={showWater}
             highlights={[
               { start: 15, end: 30, chainId: 'A', color: '#ff5722' }
             ]}
-            onLoaded={() => console.log('Structure loaded')}
-            onError={(err) => console.error('Error:', err)}
+            onLoaded={handleLoad}
+            onError={handleError}
           />
         </div>
       </div>
 
-      <div className="mt-4 text-sm text-gray-500">
-        <p>Local structure examples:</p>
-        <ul className="list-disc list-inside">
-          <li>1enh_A (Engrailed homeodomain)</li>
-          <li>1ubq_A (Ubiquitin)</li>
-          <li>1crn_A (Crambin)</li>
-          <li>4ubp_A (Ubiquitin-like protein)</li>
+      <div className="mt-4 text-gray-500">
+        <p className="font-medium">Local structure examples:</p>
+        <ul className="mt-2 space-y-1">
+          <li className="flex items-center">
+            <button
+              onClick={() => setPdbId('1enh_A')}
+              className="text-blue-600 hover:underline focus:outline-none"
+            >
+              1enh_A
+            </button>
+            <span className="ml-2">- Engrailed homeodomain</span>
+          </li>
+          <li className="flex items-center">
+            <button
+              onClick={() => setPdbId('1ubq_A')}
+              className="text-blue-600 hover:underline focus:outline-none"
+            >
+              1ubq_A
+            </button>
+            <span className="ml-2">- Ubiquitin</span>
+          </li>
+          <li className="flex items-center">
+            <button
+              onClick={() => setPdbId('1crn_A')}
+              className="text-blue-600 hover:underline focus:outline-none"
+            >
+              1crn_A
+            </button>
+            <span className="ml-2">- Crambin</span>
+          </li>
         </ul>
-        <p className="mt-2">Format: [pdbid]_[chain]</p>
+        <p className="mt-2 text-sm">Format: [pdbid]_[chain]</p>
+
+        <div className="mt-4 p-4 bg-gray-100 rounded">
+          <h3 className="font-medium mb-2">Debugging Info:</h3>
+          <p>Current path will be constructed as:</p>
+          <code className="block bg-gray-800 text-white p-2 rounded mt-1 text-sm">
+            {localBasePath}/{pdbId.split('_')[0].substring(0, 2)}/{pdbId}.pdb
+          </code>
+          <p className="mt-2 text-sm">Make sure this file exists on your server.</p>
+        </div>
       </div>
     </div>
   );
