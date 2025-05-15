@@ -226,6 +226,26 @@ export default function ECODHomePage() {
               examples={exampleSearches}
               saveHistory={true}
             />
+
+            {/* NEW: Quick access badges/buttons for Sequence and Structure search */}
+            <div className="flex justify-center mt-4 space-x-4">
+              <Link
+                href="/search/sequence"
+                className="inline-flex items-center px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-md text-white text-sm font-medium transition-colors"
+              >
+                <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                Search by Sequence
+              </Link>
+              <button
+                onClick={() => setSearchDialogOpen(true)}
+                className="inline-flex items-center px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-md text-white text-sm font-medium transition-colors"
+              >
+                <FileSearch className="mr-2 h-4 w-4" />
+                Search by Structure
+              </button>
+            </div>
           </div>
         </div>
       </section>
