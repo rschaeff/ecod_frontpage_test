@@ -366,16 +366,37 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
       const localPath = getLocalStructurePath(id);
       console.log(`Attempting to load structure from: ${localPath}`);
 
-      // Create a download component
       try {
-        const data = await plugin.builders.data.download({ url: localPath, isBinary: false }, { state: { isGhost: true } });
-        console.log('Successfully downloaded structure data');
+        // Method 1: Try using the hierarchy builder directly - often more robust
+        const trajectory = await plugin.builders.structure.parseTrajectory(
+          await plugin.builders.data.download({ url: localPath, isBinary: false })
+        );
 
-        // Determine format based on file extension
-        const format = localPath.toLowerCase().endsWith('.pdb') ? 'pdb' : 'mmcif';
-        console.log(`Using format: ${format}`);
+        // Apply a preset - this handles most of the structure creation pipeline
+        await plugin.builders.structure.hierarchy.applyPreset(trajectory, 'default');
+
+        console.log('Structure loaded and displayed successfully');
+        setIsLoading(false);
+        if (onLoaded) onLoaded();
+      } catch (loadError) {
+        console.error('Error with direct hierarchy load method, trying alternative approach:', loadError);
 
         try {
+          // Method 2: Try the longer step-by-step approach
+          // Create a download component - use state.data.base instead of plugin.builders
+          const data = await plugin.builders.data.download({
+            url: localPath,
+            isBinary: false,
+            label: `PDB ${id}`  // Adding a label can help with debugging
+          }, { state: { isGhost: false } }); // Try with isGhost false
+
+          console.log('Successfully downloaded structure data');
+
+          // Determine format based on file extension
+          const format = localPath.toLowerCase().endsWith('.pdb') ? 'pdb' : 'mmcif';
+          console.log(`Using format: ${format}`);
+
+          // Parse the downloaded data
           const trajectory = await plugin.builders.structure.parseTrajectory(data, format);
           console.log('Successfully parsed trajectory');
 
@@ -389,28 +410,25 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
           // Store the structure reference
           structureRef.current = structure;
 
-          // Apply initial visualization
-          await updateVisualization();
+          // Apply a preset representation
+          const preset = getRepresentationPreset();
+          await plugin.builders.structure.representation.addPreset(structure, preset);
+
           console.log('Visualization updated');
 
           // Set loading complete
           setIsLoading(false);
           if (onLoaded) onLoaded();
-        } catch (parseErr) {
-          console.error('Error parsing structure data:', parseErr);
-          setError(`Failed to parse structure data: ${parseErr.message}`);
+        } catch (alternativeError) {
+          console.error('Alternative loading method also failed:', alternativeError);
+          setError(`Failed to load structure: ${alternativeError.message || 'Unknown error'}`);
           setIsLoading(false);
-          if (onError) onError(parseErr);
+          if (onError) onError(alternativeError);
         }
-      } catch (downloadErr) {
-        console.error('Error downloading structure from local path:', downloadErr);
-        setError(`Failed to download structure: ${downloadErr.message}`);
-        setIsLoading(false);
-        if (onError) onError(downloadErr);
       }
     } catch (err) {
       console.error('Error in loadStructureLocal:', err);
-      setError(`Failed to load structure: ${err.message}`);
+      setError(`Failed to load structure: ${err.message || 'Unknown error'}`);
       setIsLoading(false);
       if (onError) onError(err as Error);
     }
