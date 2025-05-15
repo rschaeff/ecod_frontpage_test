@@ -2,7 +2,8 @@
 
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { PluginContext } from 'molstar/lib/mol-plugin/context';
-import { createPluginUI } from 'molstar/lib/mol-plugin-ui/react';
+import { createPluginUI } from 'molstar/lib/mol-plugin-ui/index';
+import { renderReact18 } from 'molstar/lib/mol-plugin-ui/react18';
 import { DefaultPluginUISpec } from 'molstar/lib/mol-plugin-ui/spec';
 import { PresetStructureRepresentations } from 'molstar/lib/mol-plugin-state/builder/structure/representation-preset';
 import { MolScriptBuilder as MS } from 'molstar/lib/mol-script/language/builder';
@@ -126,8 +127,10 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
     const initMolstar = async () => {
       try {
         // Create a new plugin instance with default spec
-        const { plugin, canvas } = await createPluginUI(containerRef.current, {
-          spec: DefaultPluginUISpec()
+        const { plugin } = await createPluginUI({
+          target: containerRef.current,
+          spec: DefaultPluginUISpec(),
+          render: renderReact18
         });
 
         pluginRef.current = plugin;
