@@ -58,42 +58,61 @@ export default function ECODHomePage() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch statistics and status data
-  useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
-      setError(null);
+// Inside your ECODHomePage component
 
-      try {
-        // Fetch both stats and status in parallel
-        const [statsResponse, statusResponse] = await Promise.all([
-          fetch('/api/stats'),
-          fetch('/api/status')
-        ]);
+// Fetch statistics and status data
+useEffect(() => {
+  const fetchData = async () => {
+    setIsLoading(true);
+    setError(null);
 
-        if (!statsResponse.ok) {
-          throw new Error(`Failed to fetch stats: ${statsResponse.status}`);
-        }
+    try {
+      // Fetch both stats and status in parallel
+      const [statsResponse, statusResponse] = await Promise.all([
+        fetch('/api/stats'),
+        fetch('/api/status')
+      ]);
 
-        if (!statusResponse.ok) {
-          throw new Error(`Failed to fetch status: ${statusResponse.status}`);
-        }
-
-        const statsData = await statsResponse.json();
-        const statusData = await statusResponse.json();
-
-        setStats(statsData);
-        setStatus(statusData);
-      } catch (err) {
-        console.error('Error fetching data:', err);
-        setError(err instanceof Error ? err.message : 'An unknown error occurred');
-      } finally {
-        setIsLoading(false);
+      // Check response status codes
+      if (!statsResponse.ok) {
+        console.error('Stats API Error:', statsResponse.status, statsResponse.statusText);
+        throw new Error(`Failed to fetch stats: ${statsResponse.status}`);
       }
-    };
 
-    fetchData();
-  }, []);
+      if (!statusResponse.ok) {
+        console.error('Status API Error:', statusResponse.status, statusResponse.statusText);
+        throw new Error(`Failed to fetch status: ${statusResponse.status}`);
+      }
+
+      // Parse JSON data
+      const statsData = await statsResponse.json();
+      const statusData = await statusResponse.json();
+
+      // Log the returned data for debugging
+      console.log('Stats data received:', statsData);
+      console.log('Status data received:', statusData);
+
+      // Validate the shape of the data
+      if (!statsData.totalDomains && statsData.totalDomains !== 0) {
+        console.warn('Stats data missing totalDomains:', statsData);
+      }
+
+      if (!statusData.version) {
+        console.warn('Status data missing version:', statusData);
+      }
+
+      setStats(statsData);
+      setStatus(statusData);
+    } catch (err) {
+      console.error('Error fetching data:', err);
+      setError(err instanceof Error ? err.message : 'An unknown error occurred');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  fetchData();
+}, []);
 
   // Format large numbers with commas
   const formatNumber = (num: number): string => {
@@ -372,50 +391,71 @@ export default function ECODHomePage() {
         </div>
       </section>
 
-      {/* Statistics section */}
-      <section className="py-12 bg-gray-100">
-        <div className="container mx-auto px-4">
-          <h2 className="text-2xl font-bold text-center mb-12">ECOD Database Statistics</h2>
+    {/* Statistics section */}
+    <section className="py-12 bg-gray-100">
+      <div className="container mx-auto px-4">
+        <h2 className="text-2xl font-bold text-center mb-12">ECOD Database Statistics</h2>
 
-          {isLoading ? (
-            <div className="flex justify-center">
-              <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-            </div>
-          ) : error ? (
-            <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-md text-center">
-              <p>Failed to load statistics: {error}</p>
-            </div>
-          ) : stats ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <StatCard
-                label="Domains"
-                value={formatNumber(stats.totalDomains)}
-                description="Total protein domains in the database"
-                icon={<Database className="h-5 w-5" />}
-                valueClassName="text-blue-600"
-              />
-              <StatCard
-                label="PDB Entries"
-                value={formatNumber(stats.pdbDomains)}
-                description="Structures from Protein Data Bank"
-                valueClassName="text-green-600"
-              />
-              <StatCard
-                label="F-groups"
-                value={formatNumber(stats.fgroups)}
-                description="Family classification groups"
-                valueClassName="text-yellow-600"
-              />
-              <StatCard
-                label="H-groups"
-                value={formatNumber(stats.hgroups)}
-                description="Homology classification groups"
-                valueClassName="text-purple-600"
-              />
-            </div>
-          ) : (
-            <div className="text-center text-gray-500">No statistics available</div>
+        {isLoading ? (
+          <div className="flex justify-center">
+            <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+          </div>
+        ) : error ? (
+          <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-md text-center">
+            <p>Failed to load statistics: {error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-2 bg-red-100 hover:bg-red-200 text-red-800 font-medium py-1 px-3 rounded-md text-sm"
+            >
+              Retry
+            </button>
+          </div>
+        ) : stats ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <StatCard
+              label="Domains"
+              value={stats.totalDomains ? formatNumber(stats.totalDomains) : 'N/A'}
+              description="Total protein domains in the database"
+              icon={<Database className="h-5 w-5" />}
+              valueClassName="text-blue-600"
+            />
+            <StatCard
+              label="PDB Domains"
+              value={stats.pdbDomains ? formatNumber(stats.pdbDomains) : 'N/A'}
+              description="Experimental structures from Protein Data Bank"
+              valueClassName="text-green-600"
+            />
+            <StatCard
+              label="F-groups"
+              value={stats.fgroups ? formatNumber(stats.fgroups) : 'N/A'}
+              description="Family classification groups"
+              valueClassName="text-yellow-600"
+            />
+            <StatCard
+              label="H-groups"
+              value={stats.hgroups ? formatNumber(stats.hgroups) : 'N/A'}
+              description="Homology classification groups"
+              valueClassName="text-purple-600"
+            />
+          </div>
+        ) : (
+          <div className="text-center text-gray-500">No statistics available</div>
+        )}
+
+        <div className="mt-8 text-center">
+          {status ? (
+            <p className="text-gray-600">
+              Last Updated: <span className="font-semibold">{status.version}</span>
+              {status.lastUpdate && (
+                <> - {new Date(status.lastUpdate).toLocaleDateString()}</>
+              )}
+            </p>
+          ) : !isLoading && (
+            <p className="text-gray-600">Version information not available</p>
           )}
+        </div>
+      </div>
+    </section>
 
           <div className="mt-8 text-center">
             {status ? (
