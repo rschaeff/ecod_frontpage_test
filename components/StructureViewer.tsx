@@ -216,8 +216,27 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
       // Safely dispose of the plugin
       if (pluginInstance) {
         try {
-          // First clear any structures
-          pluginInstance.managers.structure.hierarchy.removeAll();
+          // First clear any structures to ensure all created resources are properly released
+          if (pluginInstance.managers.structure?.hierarchy) {
+            pluginInstance.managers.structure.hierarchy.removeAll();
+          }
+
+          // Clear any visuals
+          if (pluginInstance.managers.structure?.component) {
+            pluginInstance.managers.structure.component.state.clear();
+          }
+
+          // Clear selections and highlights
+          if (pluginInstance.managers.interactivity) {
+            pluginInstance.managers.interactivity.clearHighlights();
+            pluginInstance.managers.interactivity.lociSelects.deselectAll();
+          }
+
+          // Reset camera before disposal
+          if (pluginInstance.managers.camera) {
+            pluginInstance.managers.camera.reset();
+          }
+
           // Then dispose the plugin
           pluginInstance.dispose();
         } catch (err) {
