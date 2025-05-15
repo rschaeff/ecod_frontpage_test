@@ -12,17 +12,14 @@ import { StateTransforms } from 'molstar/lib/mol-plugin-state/transforms';
 import { PluginStateObject } from 'molstar/lib/mol-plugin-state/objects';
 import { Color } from 'molstar/lib/mol-util/color';
 import { ColorTheme } from 'molstar/lib/mol-theme/color';
-import { Asset } from 'molstar/lib/mol-util/assets';
 import { Structure } from 'molstar/lib/mol-model/structure';
 import { StructureElement } from 'molstar/lib/mol-model/structure/structure';
-import { ParamDefinition as PD } from 'molstar/lib/mol-util/param-definition';
-import { Script } from 'molstar/lib/mol-script/script';
 
 // Define prop types for the component
 interface StructureViewerProps {
   pdbId?: string;
   url?: string;
-  localBasePath?: string; // New prop for local repository base path
+  localBasePath?: string;
   style?: 'cartoon' | 'ball-and-stick' | 'surface' | 'spacefill';
   colorScheme?: 'chain' | 'secondary-structure' | 'residue-type' | 'hydrophobicity';
   showSideChains?: boolean;
@@ -43,17 +40,10 @@ interface StructureViewerProps {
   onError?: (error: Error) => void;
 }
 
-/**
- * StructureViewer component using mol* for 3D visualization
- *
- * This component creates a 3D visualization of a protein structure
- * using mol* library. It supports various rendering styles, highlighting,
- * and interaction with protein structure.
- */
 const StructureViewer = forwardRef<any, StructureViewerProps>(({
   pdbId,
   url,
-  localBasePath = '/data/ecod/chain_data', // Default path to your local repository
+  localBasePath = '/data/ecod/chain_data',
   style = 'cartoon',
   colorScheme = 'chain',
   showSideChains = false,
@@ -68,12 +58,43 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
   onLoaded,
   onError
 }, ref) => {
-  const containerRef = useRef<HTMLDivElement>(null);
+  // Create a portal container for Mol* to render into
+  // This will be outside of React's DOM management
+  const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const pluginRef = useRef<PluginContext | null>(null);
   const structureRef = useRef<StateObjectSelector<PluginStateObject.Molecule.Structure> | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // When the wrapper div is mounted, create the portal container
+  useEffect(() => {
+    if (!wrapperRef.current) return;
+
+    // Create a container div that will be outside React's control
+    const container = document.createElement('div');
+    container.style.width = '100%';
+    container.style.height = '100%';
+    container.style.position = 'relative';
+    container.className = 'mol-viewer-portal';
+
+    // Append it to the wrapper (managed by React)
+    wrapperRef.current.appendChild(container);
+    setPortalContainer(container);
+
+    // Clean up function
+    return () => {
+      if (wrapperRef.current && wrapperRef.current.contains(container)) {
+        try {
+          // Remove it directly so React doesn't try to
+          wrapperRef.current.removeChild(container);
+        } catch (err) {
+          console.error('Error removing portal container:', err);
+        }
+      }
+    };
+  }, []);
 
   // Expose methods to parent through ref
   useImperativeHandle(ref, () => ({
@@ -117,85 +138,78 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
     getPlugin: () => pluginRef.current
   }));
 
-  // Initialize the mol* viewer
+  // Initialize the mol* viewer when portal container is ready
   useEffect(() => {
-    // Prevent multiple initializations
-    if (isInitialized || !containerRef.current) return;
+    if (!portalContainer || isInitialized) return;
 
     let unmounted = false;
-    let pluginInstance: PluginContext | null = null;
-    let domCleanupRequired = true;
 
     const initMolstar = async () => {
       try {
         // Create a new plugin instance with default spec
         const plugin = await createPluginUI({
-          target: containerRef.current,
+          target: portalContainer,
           spec: DefaultPluginUISpec(),
           render: renderReact18
         });
 
         if (unmounted) {
-          // If component was unmounted during async initialization
-          if (plugin) plugin.dispose();
+          plugin.dispose();
           return;
         }
 
-        pluginInstance = plugin;
         pluginRef.current = plugin;
 
         // Initialize the plugin
-        if (containerRef.current && !unmounted) {
-          plugin.layout.setRoot({ kind: 'canvas3d' });
-          plugin.canvas3d?.setProps({
-            camera: { fov: 45 },
-            renderer: {
-              backgroundColor: { r: 0.9, g: 0.9, b: 0.9 },
-              pickingAlphaThreshold: 0.5,
+        plugin.layout.setRoot({ kind: 'canvas3d' });
+        plugin.canvas3d?.setProps({
+          camera: { fov: 45 },
+          renderer: {
+            backgroundColor: { r: 0.9, g: 0.9, b: 0.9 },
+            pickingAlphaThreshold: 0.5,
+          }
+        });
+
+        // Set initial canvas size
+        plugin.layout.setProps({
+          layoutIsExpanded: false,
+          showControls: false,
+          showSequence: false,
+          showLog: false,
+          showLeftPanel: false
+        });
+
+        plugin.canvas3d?.resized();
+
+        // Add interactions for residue selection
+        if (onResidueSelect) {
+          plugin.behaviors.interaction.click.subscribe(e => {
+            if (e.current.loci.kind === 'element-loci') {
+              // Get the residue number from the clicked element
+              const loc = e.current.loci;
+              if (!Structure.isLoci(loc)) return;
+
+              const seq_id = StructureElement.Location.is(loc.elements[0])
+                ? loc.elements[0].unit.model.atomicHierarchy.residues.label_seq_id.value(loc.elements[0].element)
+                : null;
+
+              if (seq_id !== null) {
+                onResidueSelect(seq_id);
+              }
             }
           });
+        }
 
-          // Set initial canvas size
-          plugin.layout.setProps({
-            layoutIsExpanded: false,
-            showControls: false,
-            showSequence: false,
-            showLog: false,
-            showLeftPanel: false
-          });
+        setIsInitialized(true);
 
-          plugin.canvas3d?.resized();
-
-          // Add interactions for residue selection
-          if (onResidueSelect) {
-            plugin.behaviors.interaction.click.subscribe(e => {
-              if (e.current.loci.kind === 'element-loci') {
-                // Get the residue number from the clicked element
-                const loc = e.current.loci;
-                if (!Structure.isLoci(loc)) return;
-
-                const seq_id = StructureElement.Location.is(loc.elements[0])
-                  ? loc.elements[0].unit.model.atomicHierarchy.residues.label_seq_id.value(loc.elements[0].element)
-                  : null;
-
-                if (seq_id !== null) {
-                  onResidueSelect(seq_id);
-                }
-              }
-            });
-          }
-
-          setIsInitialized(true);
-
-          // Load structure if pdbId or url is provided
-          if (pdbId) {
-            loadStructureLocal(plugin, pdbId);
-          } else if (url) {
-            loadStructureFromUrl(plugin, url);
-          } else {
-            setIsLoading(false);
-            if (onLoaded) onLoaded();
-          }
+        // Load structure if pdbId or url is provided
+        if (pdbId) {
+          loadStructureLocal(plugin, pdbId);
+        } else if (url) {
+          loadStructureFromUrl(plugin, url);
+        } else {
+          setIsLoading(false);
+          if (onLoaded) onLoaded();
         }
       } catch (err) {
         console.error('Error initializing mol* viewer:', err);
@@ -210,76 +224,32 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
     // Start initialization
     initMolstar();
 
-    // Cleanup function
+    // Cleanup
     return () => {
       unmounted = true;
+    };
+  }, [portalContainer, isInitialized]);
 
-      // Safely dispose of the plugin - with careful DOM handling
-      if (pluginInstance && domCleanupRequired) {
+  // Clean up Mol* when component unmounts
+  useEffect(() => {
+    return () => {
+      // Properly dispose of the plugin
+      if (pluginRef.current) {
         try {
-          // Capture reference to container before plugin disposal
-          const container = containerRef.current;
-
-          // First clear any structures to ensure all created resources are properly released
-          if (pluginInstance.managers.structure?.hierarchy) {
-            pluginInstance.managers.structure.hierarchy.removeAll();
+          // First clear structures
+          if (pluginRef.current.managers.structure?.hierarchy) {
+            pluginRef.current.managers.structure.hierarchy.removeAll();
           }
 
-          // Clear visuals and state
-          if (pluginInstance.managers.structure?.component) {
-            pluginInstance.managers.structure.component.state.clear();
-          }
-
-          // Clear selections and highlights
-          if (pluginInstance.managers.interactivity) {
-            pluginInstance.managers.interactivity.clearHighlights();
-            pluginInstance.managers.interactivity.lociSelects.deselectAll();
-          }
-
-          // Reset camera before disposal
-          if (pluginInstance.managers.camera) {
-            pluginInstance.managers.camera.reset();
-          }
-
-          // Dispose the plugin using a small delay to avoid race conditions
-          // with React's DOM operations
-          setTimeout(() => {
-            try {
-              pluginInstance?.dispose();
-
-              // After plugin disposal, make sure container is clean
-              if (container) {
-                // Manually clean up any remaining DOM elements
-                // This is a safeguard against DOM manipulation issues
-                const cleanup = () => {
-                  if (container && container.childNodes.length > 0) {
-                    // This creates a new div and moves all content from container to it
-                    // This way all Mol* created DOM elements are detached from React's DOM
-                    const tempDiv = document.createElement('div');
-                    while (container.firstChild) {
-                      tempDiv.appendChild(container.firstChild);
-                    }
-                    // Now we can safely dispose of this div and all Mol* content
-                    setTimeout(() => tempDiv.remove(), 0);
-                  }
-                };
-
-                // Execute cleanup immediately
-                cleanup();
-              }
-            } catch (err) {
-              console.error('Error during delayed cleanup:', err);
-            }
-          }, 0);
-
-          domCleanupRequired = false;
+          // Dispose the plugin itself
+          pluginRef.current.dispose();
         } catch (err) {
-          console.error('Error during cleanup:', err);
+          console.error('Error disposing Mol* plugin:', err);
         }
-      }
 
-      pluginRef.current = null;
-      structureRef.current = null;
+        pluginRef.current = null;
+        structureRef.current = null;
+      }
     };
   }, []);
 
@@ -380,46 +350,6 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
     } catch (err) {
       console.error('Error loading structure from local path:', err);
       setError(`Failed to load structure: ${err}`);
-      setIsLoading(false);
-      if (onError) onError(err as Error);
-    }
-  };
-
-  // Original web-based load function (kept for backward compatibility)
-  const loadStructure = async (plugin: PluginContext, id: string) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      // Clear any existing structures
-      if (structureRef.current) {
-        plugin.builders.structure.hierarchy.removeAll();
-        structureRef.current = null;
-      }
-
-      // Fetch from RCSB PDB or PDBe
-      const url = `https://files.rcsb.org/download/${id.toUpperCase()}.cif`;
-
-      // Create a download component
-      const data = await plugin.builders.data.download({ url, isBinary: false }, { state: { isGhost: true } });
-      const trajectory = await plugin.builders.structure.parseTrajectory(data, 'mmcif');
-
-      // Create the molecular structure
-      const model = await plugin.builders.structure.createModel(trajectory);
-      const structure = await plugin.builders.structure.createStructure(model);
-
-      // Store the structure reference
-      structureRef.current = structure;
-
-      // Apply initial visualization
-      await updateVisualization();
-
-      // Set loading complete
-      setIsLoading(false);
-      if (onLoaded) onLoaded();
-    } catch (err) {
-      console.error('Error loading structure:', err);
-      setError('Failed to load structure');
       setIsLoading(false);
       if (onError) onError(err as Error);
     }
@@ -663,7 +593,7 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
 
   return (
     <div
-      ref={containerRef}
+      ref={wrapperRef}
       style={{
         width: width,
         height: height,
@@ -673,20 +603,47 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
       className="mol-viewer-container"
     >
       {error && (
-        <div className="absolute inset-0 flex items-center justify-center bg-red-50 z-10">
-          <div className="text-center p-4">
-            <div className="text-red-500 text-3xl mb-2">⚠️</div>
-            <div className="text-red-700 font-bold">{error}</div>
-            <div className="text-sm text-red-600 mt-2">Please check if the PDB ID is valid or try again later.</div>
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: 'rgba(255, 235, 235, 0.9)',
+          zIndex: 10
+        }}>
+          <div style={{textAlign: 'center', padding: '1rem'}}>
+            <div style={{color: '#e53e3e', fontSize: '1.875rem', marginBottom: '0.5rem'}}>⚠️</div>
+            <div style={{color: '#c53030', fontWeight: 'bold'}}>{error}</div>
+            <div style={{fontSize: '0.875rem', color: '#e53e3e', marginTop: '0.5rem'}}>
+              Please check if the PDB ID is valid or try again later.
+            </div>
           </div>
         </div>
       )}
 
       {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-70 z-10">
-          <div className="text-center">
-            <div className="inline-block w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-2"></div>
-            <p className="text-gray-700">Loading structure...</p>
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: 'rgba(255, 255, 255, 0.7)',
+          zIndex: 10
+        }}>
+          <div style={{textAlign: 'center'}}>
+            <div style={{
+              display: 'inline-block',
+              width: '2rem',
+              height: '2rem',
+              border: '0.25rem solid #3b82f6',
+              borderTopColor: 'transparent',
+              borderRadius: '9999px',
+              animation: 'spin 1s linear infinite',
+              marginBottom: '0.5rem'
+            }}></div>
+            <p style={{color: '#4b5563'}}>Loading structure...</p>
           </div>
         </div>
       )}
