@@ -310,8 +310,10 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
     const baseName = idParts[0];
     const chain = idParts.length > 1 ? idParts[1] : '';
 
-    // Get the first two characters for the subdirectory
-    const subDir = baseName.substring(0, 2);
+    // Get the first two characters of the base name without the numeric prefix
+    // For example, for "1enh" we want "en", not "1e"
+    const baseNameLetters = baseName.replace(/^\d+/, ''); // Remove leading digits
+    const subDir = baseNameLetters.substring(0, 2);
 
     // Construct the path
     let path = `${localBasePath}/${subDir}/${baseName}`;
