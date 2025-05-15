@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Search, Database, Download, HelpCircle, FileSearch, X } from 'lucide-react'; // Added X icon
+import React, { useState, useEffect } from 'react';
+import { Search, Database, Download, HelpCircle, FileSearch, X } from 'lucide-react';
 import Link from 'next/link';
 
 // Import modular components
@@ -20,6 +20,24 @@ interface UploadedFile extends File {
   // Add any additional properties we might need
 }
 
+// Types for API responses
+interface StatsData {
+  totalDomains: number;
+  pdbDomains: number;
+  alphafoldDomains: number;
+  fgroups: number;
+  hgroups: number;
+  tgroups: number;
+  xgroups: number;
+  manualReps: number;
+}
+
+interface StatusData {
+  version: string;
+  lastUpdate: string;
+  status: string;
+}
+
 /**
  * ECODHomePage component - Main landing page for ECOD website
  */
@@ -34,13 +52,53 @@ export default function ECODHomePage() {
   const [structureId, setStructureId] = useState<string>('');
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
 
-  // Current version info (would come from an API in a real app)
-  const currentVersion = 'develop292';
-  const releaseDate = '08/30/2024';
-  const domainCount = '2,532,845';
-  const pdbEntries = '202,451';
-  const fGroups = '15,000+';
-  const hGroups = '2,000+';
+  // State for API data
+  const [stats, setStats] = useState<StatsData | null>(null);
+  const [status, setStatus] = useState<StatusData | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch statistics and status data
+  useEffect(() => {
+    const fetchData = async () => {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        // Fetch both stats and status in parallel
+        const [statsResponse, statusResponse] = await Promise.all([
+          fetch('/api/stats'),
+          fetch('/api/status')
+        ]);
+
+        if (!statsResponse.ok) {
+          throw new Error(`Failed to fetch stats: ${statsResponse.status}`);
+        }
+
+        if (!statusResponse.ok) {
+          throw new Error(`Failed to fetch status: ${statusResponse.status}`);
+        }
+
+        const statsData = await statsResponse.json();
+        const statusData = await statusResponse.json();
+
+        setStats(statsData);
+        setStatus(statusData);
+      } catch (err) {
+        console.error('Error fetching data:', err);
+        setError(err instanceof Error ? err.message : 'An unknown error occurred');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  // Format large numbers with commas
+  const formatNumber = (num: number): string => {
+    return new Intl.NumberFormat().format(num);
+  };
 
   // Handle search dialog submission
   const handleSearchSubmit = () => {
@@ -227,7 +285,7 @@ export default function ECODHomePage() {
               saveHistory={true}
             />
 
-            {/* NEW: Quick access badges/buttons for Sequence and Structure search */}
+            {/* Quick access badges/buttons for Sequence and Structure search */}
             <div className="flex justify-center mt-4 space-x-4">
               <Link
                 href="/search/sequence"
@@ -318,38 +376,55 @@ export default function ECODHomePage() {
       <section className="py-12 bg-gray-100">
         <div className="container mx-auto px-4">
           <h2 className="text-2xl font-bold text-center mb-12">ECOD Database Statistics</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <StatCard
-              label="Domains"
-              value={domainCount}
-              description="Total protein domains in the database"
-              icon={<Database className="h-5 w-5" />}
-              valueClassName="text-blue-600"
-            />
-            <StatCard
-              label="PDB Entries"
-              value={pdbEntries}
-              description="Structures from Protein Data Bank"
-              valueClassName="text-green-600"
-            />
-            <StatCard
-              label="F-groups"
-              value={fGroups}
-              description="Family classification groups"
-              valueClassName="text-yellow-600"
-            />
-            <StatCard
-              label="H-groups"
-              value={hGroups}
-              description="Homology classification groups"
-              valueClassName="text-purple-600"
-            />
-          </div>
+
+          {isLoading ? (
+            <div className="flex justify-center">
+              <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+          ) : error ? (
+            <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-md text-center">
+              <p>Failed to load statistics: {error}</p>
+            </div>
+          ) : stats ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <StatCard
+                label="Domains"
+                value={formatNumber(stats.totalDomains)}
+                description="Total protein domains in the database"
+                icon={<Database className="h-5 w-5" />}
+                valueClassName="text-blue-600"
+              />
+              <StatCard
+                label="PDB Entries"
+                value={formatNumber(stats.pdbDomains)}
+                description="Structures from Protein Data Bank"
+                valueClassName="text-green-600"
+              />
+              <StatCard
+                label="F-groups"
+                value={formatNumber(stats.fgroups)}
+                description="Family classification groups"
+                valueClassName="text-yellow-600"
+              />
+              <StatCard
+                label="H-groups"
+                value={formatNumber(stats.hgroups)}
+                description="Homology classification groups"
+                valueClassName="text-purple-600"
+              />
+            </div>
+          ) : (
+            <div className="text-center text-gray-500">No statistics available</div>
+          )}
 
           <div className="mt-8 text-center">
-            <p className="text-gray-600">
-              Last Updated: <span className="font-semibold">{currentVersion}</span> - {releaseDate}
-            </p>
+            {status ? (
+              <p className="text-gray-600">
+                Last Updated: <span className="font-semibold">{status.version}</span> - {new Date(status.lastUpdate).toLocaleDateString()}
+              </p>
+            ) : (
+              <p className="text-gray-600">Loading version information...</p>
+            )}
           </div>
         </div>
       </section>
