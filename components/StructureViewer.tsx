@@ -77,6 +77,7 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
     container.style.width = '100%';
     container.style.height = '100%';
     container.style.position = 'relative';
+    container.style.overflow = 'hidden'; // Add overflow constraint
     container.className = 'mol-viewer-portal';
 
     // Append it to the wrapper (managed by React)
@@ -149,7 +150,18 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
         // Create a new plugin instance with default spec
         const plugin = await createPluginUI({
           target: portalContainer,
-          spec: DefaultPluginUISpec(),
+          spec: {
+            ...DefaultPluginUISpec(),
+            layout: {
+              initial: {
+                isExpanded: false,
+                showControls: false
+              }
+            },
+            components: {
+              remoteState: 'none'
+            }
+          },
           render: renderReact18
         });
 
@@ -598,7 +610,10 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
         width: width,
         height: height,
         position: 'relative',
-        background: '#f5f5f5'
+        background: '#f5f5f5',
+        overflow: 'hidden', // Add containment
+        contain: 'strict', // Add CSS containment
+        isolation: 'isolate' // Create a new stacking context
       }}
       className="mol-viewer-container"
     >
@@ -647,6 +662,12 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
           </div>
         </div>
       )}
+
+      <style jsx>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 });
