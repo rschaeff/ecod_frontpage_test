@@ -145,7 +145,10 @@ export default function TestMolstar() {
           <h3 className="font-medium mb-2">Debugging Info:</h3>
           <p>Current path will be constructed as:</p>
           <code className="block bg-gray-800 text-white p-2 rounded mt-1 text-sm">
-            {localBasePath}/{pdbId.split('_')[0].replace(/^\d+/, '').substring(0, 2)}/{pdbId}.pdb
+            {localBasePath.endsWith('/') ?
+              `${localBasePath}${pdbId.split('_')[0].replace(/^\d+/, '').substring(0, 2)}/${pdbId}.pdb` :
+              `${localBasePath}/${pdbId.split('_')[0].replace(/^\d+/, '').substring(0, 2)}/${pdbId}.pdb`
+            }
           </code>
           <p className="mt-2 text-sm">Make sure this file exists on your server.</p>
         </div>

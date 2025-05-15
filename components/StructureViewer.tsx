@@ -191,7 +191,23 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
           showLeftPanel: false
         });
 
-        plugin.canvas3d?.resized();
+        // Resize canvas with proper checks
+        try {
+          if (plugin.canvas3d) {
+            // Check if resized is a function or property access
+            if (typeof plugin.canvas3d.resized === 'function') {
+              plugin.canvas3d.resized();
+            } else if (plugin.canvas3d.resize && typeof plugin.canvas3d.resize === 'function') {
+              // Try alternative resize method if available
+              plugin.canvas3d.resize();
+            } else {
+              console.warn('Canvas resize method not found, will rely on automatic layout');
+            }
+          }
+        } catch (resizeError) {
+          console.warn('Error during canvas resize, continuing anyway:', resizeError);
+          // Continue initialization despite resize error
+        }
 
         // Add interactions for residue selection
         if (onResidueSelect) {
@@ -315,12 +331,20 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
     const baseNameLetters = baseName.replace(/^\d+/, ''); // Remove leading digits
     const subDir = baseNameLetters.substring(0, 2);
 
-    // Construct the path
-    let path = `${localBasePath}/${subDir}/${baseName}`;
-    if (chain) {
-      path += `_${chain}`;
+    // Format: /data/ecod/chain_data/en/1enh_A.pdb
+    // Use the localBasePath as provided, append the subdirectory and filename
+    let path;
+    if (localBasePath.endsWith('/')) {
+      path = `${localBasePath}${subDir}/`;
+    } else {
+      path = `${localBasePath}/${subDir}/`;
     }
-    path += '.pdb'; // Assuming PDB format
+
+    if (chain) {
+      path += `${baseName}_${chain}.pdb`;
+    } else {
+      path += `${baseName}.pdb`;
+    }
 
     console.log(`Generated local path: ${path} for PDB ID: ${pdbId}`);
     return path;
