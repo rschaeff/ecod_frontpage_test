@@ -124,6 +124,7 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
 
     let unmounted = false;
     let pluginInstance: PluginContext | null = null;
+    let domCleanupRequired = true;
 
     const initMolstar = async () => {
       try {
@@ -213,15 +214,18 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
     return () => {
       unmounted = true;
 
-      // Safely dispose of the plugin
-      if (pluginInstance) {
+      // Safely dispose of the plugin - with careful DOM handling
+      if (pluginInstance && domCleanupRequired) {
         try {
+          // Capture reference to container before plugin disposal
+          const container = containerRef.current;
+
           // First clear any structures to ensure all created resources are properly released
           if (pluginInstance.managers.structure?.hierarchy) {
             pluginInstance.managers.structure.hierarchy.removeAll();
           }
 
-          // Clear any visuals
+          // Clear visuals and state
           if (pluginInstance.managers.structure?.component) {
             pluginInstance.managers.structure.component.state.clear();
           }
@@ -237,8 +241,38 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
             pluginInstance.managers.camera.reset();
           }
 
-          // Then dispose the plugin
-          pluginInstance.dispose();
+          // Dispose the plugin using a small delay to avoid race conditions
+          // with React's DOM operations
+          setTimeout(() => {
+            try {
+              pluginInstance?.dispose();
+
+              // After plugin disposal, make sure container is clean
+              if (container) {
+                // Manually clean up any remaining DOM elements
+                // This is a safeguard against DOM manipulation issues
+                const cleanup = () => {
+                  if (container && container.childNodes.length > 0) {
+                    // This creates a new div and moves all content from container to it
+                    // This way all Mol* created DOM elements are detached from React's DOM
+                    const tempDiv = document.createElement('div');
+                    while (container.firstChild) {
+                      tempDiv.appendChild(container.firstChild);
+                    }
+                    // Now we can safely dispose of this div and all Mol* content
+                    setTimeout(() => tempDiv.remove(), 0);
+                  }
+                };
+
+                // Execute cleanup immediately
+                cleanup();
+              }
+            } catch (err) {
+              console.error('Error during delayed cleanup:', err);
+            }
+          }, 0);
+
+          domCleanupRequired = false;
         } catch (err) {
           console.error('Error during cleanup:', err);
         }
