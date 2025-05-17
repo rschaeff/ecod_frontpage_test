@@ -457,17 +457,6 @@ useEffect(() => {
       </div>
     </section>
 
-          <div className="mt-8 text-center">
-            {status ? (
-              <p className="text-gray-600">
-                Last Updated: <span className="font-semibold">{status.version}</span> - {new Date(status.lastUpdate).toLocaleDateString()}
-              </p>
-            ) : (
-              <p className="text-gray-600">Loading version information...</p>
-            )}
-          </div>
-        </div>
-      </section>
 
       {/* Tree browser section - Link to dedicated page */}
       <section className="py-12 px-4">
