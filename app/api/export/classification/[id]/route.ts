@@ -13,17 +13,44 @@ export async function GET(
   try {
     const classificationId = params.id;
     
-    // Get the classification level from first character
-    const level = classificationId.charAt(0).toLowerCase();
-    
-    // Validate classification ID pattern
-    const validLevels = ['f', 't', 'h', 'x', 'a'];
-    if (!validLevels.includes(level) || !/^[FTHXA][\.0-9]*$/.test(classificationId)) {
-      return NextResponse.json(
-        { error: `Invalid classification ID: ${classificationId}` },
-        { status: 400 }
-      );
+    // Determine the classification level based on ID format
+    let level: string;
+    let levelIdColumn: string;
+
+    if (classificationId.startsWith('a.')) {
+      // Architecture level: a.1, a.2, etc.
+      level = 'A';
+      levelIdColumn = 'aid';
+    } else {
+      // For numeric IDs, count dots to determine level
+      const dotCount = (classificationId.match(/\./g) || []).length;
+
+      switch (dotCount) {
+        case 0:
+          // X-group: 1008
+          level = 'X';
+          levelIdColumn = 'xid';
+          break;
+        case 1:
+          // H-group: 1008.1
+          level = 'H';
+          levelIdColumn = 'hid';
+          break;
+        case 2:
+          // T-group: 1008.1.1
+          level = 'T';
+          levelIdColumn = 'tid';
+          break;
+        case 3:
+        default:
+          // F-group: 1008.1.1.1
+          level = 'F';
+          levelIdColumn = 'fid';
+          break;
+      }
     }
+
+    console.log('Export API - Detected level:', level, 'Column:', levelIdColumn);
     
     // Get domains for this classification
     const domainsQuery = `
