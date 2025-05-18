@@ -448,11 +448,16 @@ function ECODTreeBrowser({ onExport }: ECODTreeBrowserProps) {
                   <div key={rep.id} className="mb-2 border-l-2 border-blue-200 pl-3 bg-blue-50 rounded-r-md py-1.5">
                     <div className="flex items-center text-sm">
                       <Link
-                        href={`/domain/${rep.id}`}
+                        href={rep.isManual ? `/representative/${rep.id}` : `/domain/${rep.id}`}
                         className="text-blue-600 hover:underline font-medium"
                       >
                         {rep.id}
                       </Link>
+                      {rep.isManual && (
+                        <span className="ml-2 text-xs bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded">
+                          Manual Rep
+                        </span>
+                      )}
                       <span className="ml-2 text-gray-500">[{rep.range}]</span>
                       {rep.pdb_id && (
                         <span className="ml-2 text-gray-600">
