@@ -1,14 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Search, ChevronRight, ChevronDown, Info, Filter, Download } from 'lucide-react';
+import { Search, ChevronRight, ChevronDown, Filter, Download, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 
 // Import modular components
 import AppLayout from '@/components/layout/AppLayout';
-import Breadcrumb from '@/components/navigation/Breadcrumb';
-import SearchForm from '@/components/SearchForm';
-import DataTable from '@/components/ui/DataTable';
 import ErrorState from '@/components/ui/ErrorState';
 import LoadingState from '@/components/ui/LoadingState';
 
@@ -16,31 +13,13 @@ import LoadingState from '@/components/ui/LoadingState';
 import { useTree } from '@/contexts/TreeContext';
 import { useUserPreferences } from '@/contexts/UserPreferencesContext';
 
-// Types for tree nodes and state
-interface TreeNode {
+// Types for search results
+interface SearchResult {
   id: string;
   name: string;
-  type: 'A' | 'X' | 'H' | 'T' | 'F';
-  children?: TreeNode[];
-}
-
-interface RepresentativeNode {
-  id: string;
-  range: string;
-  description: string;
-  structureType: 'experimental' | 'theoretical';
-  resolution?: string;
-  plddt?: string;
-  ligands?: {
-    id: string;
-    name: string;
-    count: number;
-  }[];
-}
-
-interface PfamAccession {
-  id: string;
-  name: string;
+  level: 'A' | 'X' | 'H' | 'T' | 'F';
+  parent?: string;
+  domainCount?: number;
 }
 
 /**
@@ -52,16 +31,17 @@ export default function ECODTreePage() {
     state: treeState,
     toggleNode,
     fetchNodeData,
+    selectNode,
     setActiveFilter,
     expandAll,
     collapseAll
   } = useTree();
   const { preferences } = useUserPreferences();
 
-  // Local state
+  // Local state for search
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<TreeNode[]>([]);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
 
   // Create breadcrumb items for navigation
   const breadcrumbs = [
@@ -69,8 +49,8 @@ export default function ECODTreePage() {
     { label: 'Classification Browser' }
   ];
 
-  // Handle search
-  const handleSearch = (query: string) => {
+  // Handle search using the real API
+  const handleSearch = async (query: string) => {
     if (!query.trim()) {
       setSearchResults([]);
       setIsSearching(false);
@@ -78,22 +58,35 @@ export default function ECODTreePage() {
     }
 
     setIsSearching(true);
-
-    // Simulate search - in a real app, this would be an API call
-    setTimeout(() => {
-      // Mock search results
-      const results: TreeNode[] = [
-        { id: 'A1', name: 'Alpha proteins', type: 'A' },
-        { id: 'X1.1', name: 'Globin-like', type: 'X' },
-        { id: 'H1.1.1', name: 'Globin-like', type: 'H' }
-      ].filter(node =>
-        node.id.toLowerCase().includes(query.toLowerCase()) ||
-        node.name.toLowerCase().includes(query.toLowerCase())
-      );
-
-      setSearchResults(results);
+    try {
+      const response = await fetch(`/api/tree/search?q=${encodeURIComponent(query)}`);
+      if (!response.ok) {
+        throw new Error(`Search failed: ${response.status}`);
+      }
+      const data = await response.json();
+      setSearchResults(data.results || []);
+    } catch (error) {
+      console.error('Search error:', error);
+      setSearchResults([]);
+    } finally {
       setIsSearching(false);
-    }, 500);
+    }
+  };
+
+  // Handle search result selection
+  const handleSearchResultClick = async (result: SearchResult) => {
+    setSearchQuery('');
+    setSearchResults([]);
+
+    // Select and fetch the node
+    selectNode(result.id);
+    await fetchNodeData(result.id);
+  };
+
+  // Handle export
+  const handleExport = (nodeId: string) => {
+    const exportUrl = `/api/export/classification/${nodeId}`;
+    window.open(exportUrl, '_blank');
   };
 
   return (
@@ -108,7 +101,7 @@ export default function ECODTreePage() {
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row gap-4">
             {/* Search box */}
-            <div className="md:w-1/2">
+            <div className="md:w-1/2 relative">
               <div className="relative">
                 <input
                   type="text"
@@ -137,25 +130,25 @@ export default function ECODTreePage() {
                         <li key={result.id} className="border-b last:border-b-0">
                           <button
                             className="w-full text-left px-4 py-2 hover:bg-gray-100"
-                            onClick={() => {
-                              // Navigate to the node and expand it
-                              fetchNodeData(result.id);
-                              setSearchQuery('');
-                              setSearchResults([]);
-                            }}
+                            onClick={() => handleSearchResultClick(result)}
                           >
                             <div className="flex items-center">
                               <span className={`inline-block w-6 h-6 rounded-full mr-2 text-center text-xs font-bold ${
-                                result.type === 'A' ? 'bg-red-100 text-red-800' :
-                                result.type === 'X' ? 'bg-blue-100 text-blue-800' :
-                                result.type === 'H' ? 'bg-green-100 text-green-800' :
-                                result.type === 'T' ? 'bg-purple-100 text-purple-800' :
+                                result.level === 'A' ? 'bg-red-100 text-red-800' :
+                                result.level === 'X' ? 'bg-blue-100 text-blue-800' :
+                                result.level === 'H' ? 'bg-green-100 text-green-800' :
+                                result.level === 'T' ? 'bg-purple-100 text-purple-800' :
                                 'bg-yellow-100 text-yellow-800'
                               }`}>
-                                {result.type}
+                                {result.level}
                               </span>
                               <span className="font-medium">{result.id}</span>
                               <span className="ml-2 text-gray-600">{result.name}</span>
+                              {result.domainCount && (
+                                <span className="ml-auto text-xs text-gray-500">
+                                  {result.domainCount.toLocaleString()} domains
+                                </span>
+                              )}
                             </div>
                           </button>
                         </li>
@@ -269,6 +262,7 @@ export default function ECODTreePage() {
               <button
                 onClick={expandAll}
                 className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1 rounded text-sm font-medium flex items-center"
+                disabled={treeState.loadingNode !== null}
               >
                 <ChevronDown className="h-4 w-4 mr-1" />
                 Expand All
@@ -276,6 +270,7 @@ export default function ECODTreePage() {
               <button
                 onClick={collapseAll}
                 className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1 rounded text-sm font-medium flex items-center"
+                disabled={treeState.loadingNode !== null}
               >
                 <ChevronRight className="h-4 w-4 mr-1" />
                 Collapse All
@@ -283,18 +278,18 @@ export default function ECODTreePage() {
             </div>
 
             {treeState.selectedNodeId && (
-              <div className="text-sm">
+              <div className="text-sm flex items-center">
                 <span className="text-gray-600">Selected:</span>
                 <span className="font-medium ml-1">{treeState.selectedNodeId}</span>
+                <span className="ml-2 text-gray-500">
+                  ({treeState.nodeData[treeState.selectedNodeId]?.name})
+                </span>
                 <button
-                  className="ml-3 text-blue-600 hover:text-blue-800 px-2 py-1 rounded text-xs flex items-center"
-                  onClick={() => {
-                    // Simulate CSV export
-                    alert(`Exporting ${treeState.selectedNodeId} to CSV...`);
-                  }}
+                  className="ml-3 text-blue-600 hover:text-blue-800 px-2 py-1 rounded text-xs flex items-center border border-blue-200 hover:border-blue-300"
+                  onClick={() => handleExport(treeState.selectedNodeId!)}
                 >
                   <Download className="h-3 w-3 mr-1" />
-                  Export
+                  Export CSV
                 </button>
               </div>
             )}
@@ -305,7 +300,7 @@ export default function ECODTreePage() {
       {/* Main tree container */}
       <section className="py-6">
         <div className="container mx-auto px-4">
-          {/* Tree browser with loading state */}
+          {/* Tree browser with loading and error states */}
           {treeState.error ? (
             <ErrorState
               title="Failed to load tree data"
@@ -319,12 +314,12 @@ export default function ECODTreePage() {
                 </button>
               }
             />
-          ) : treeState.loadingNode ? (
+          ) : treeState.loadingNode === 'root' ? (
             <div className="bg-white rounded-lg shadow-md p-6">
-              <LoadingState message={`Loading ${treeState.loadingNode}...`} size="small" />
+              <LoadingState message="Loading classification tree..." size="large" />
             </div>
           ) : (
-            <ECODTreeBrowser />
+            <ECODTreeBrowser onExport={handleExport} />
           )}
         </div>
       </section>
@@ -335,143 +330,93 @@ export default function ECODTreePage() {
 /**
  * ECODTreeBrowser component - Tree visualization component
  */
-function ECODTreeBrowser() {
+interface ECODTreeBrowserProps {
+  onExport: (nodeId: string) => void;
+}
+
+function ECODTreeBrowser({ onExport }: ECODTreeBrowserProps) {
   // Use tree context
-  const { state: treeState, toggleNode } = useTree();
+  const { state: treeState, toggleNode, selectNode, fetchNodeData } = useTree();
 
-  // Example tree data structure - in a real app this would come from the context
-  const treeData: TreeNode = {
-    id: 'A1',
-    name: 'Alpha proteins',
-    type: 'A',
-    children: [
-      {
-        id: 'X1.1',
-        name: 'Globin-like',
-        type: 'X',
-        children: [
-          {
-            id: 'H1.1.1',
-            name: 'Globin-like',
-            type: 'H',
-            children: [
-              {
-                id: 'T1.1.1.1',
-                name: 'Globin',
-                type: 'T',
-                children: [
-                  {
-                    id: 'F1.1.1.1.1',
-                    name: 'Hemoglobin, alpha-chain',
-                    type: 'F'
-                  },
-                  {
-                    id: 'F1.1.1.1.2',
-                    name: 'Hemoglobin, beta-chain',
-                    type: 'F'
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      },
-      {
-        id: 'X1.2',
-        name: 'Four-helical up-and-down bundle',
-        type: 'X'
-      }
-    ]
+  // Filter nodes based on active filter
+  const getFilteredNodes = (nodes: any[]) => {
+    if (treeState.activeFilter === 'all') return nodes;
+    return nodes.filter(node => node.level === treeState.activeFilter);
   };
 
-  // Example representative domains for F-groups - in a real app these would come from the context
-  const representativeDomains: Record<string, RepresentativeNode[]> = {
-    'F1.1.1.1.1': [
-      {
-        id: 'e1hhoA1',
-        range: 'A:1-141',
-        description: 'Hemoglobin alpha subunit - Human',
-        structureType: 'experimental',
-        resolution: '1.74Å',
-        ligands: [
-          { id: 'HEM', name: 'Heme', count: 1 },
-          { id: 'O2', name: 'Oxygen', count: 1 }
-        ]
-      }
-    ],
-    'F1.1.1.1.2': [
-      {
-        id: 'e1hhoB1',
-        range: 'B:1-146',
-        description: 'Hemoglobin beta subunit - Human',
-        structureType: 'experimental',
-        resolution: '1.74Å'
-      }
-    ]
-  };
-
-  // Example Pfam mappings for F-groups
-  const pfamMappings: Record<string, PfamAccession[]> = {
-    'F1.1.1.1.1': [
-      { id: 'PF00042', name: 'Globin' }
-    ],
-    'F1.1.1.1.2': [
-      { id: 'PF00042', name: 'Globin' }
-    ]
-  };
-
-  // Render a tree node
-  const renderNode = (node: TreeNode, level = 0) => {
+  // Render a tree node recursively
+  const renderNode = (node: any, level = 0) => {
     const isExpanded = treeState.expandedNodes[node.id] || false;
-    const hasChildren = node.children && node.children.length > 0;
     const isSelected = treeState.selectedNodeId === node.id;
+    const isLoading = treeState.loadingNode === node.id;
 
-    // Check if there are representative domains for this node
-    const hasRepresentatives = node.type === 'F' && representativeDomains[node.id]?.length > 0;
-
-    // Check if there are Pfam mappings for this node
-    const hasPfamMappings = node.type === 'F' && pfamMappings[node.id]?.length > 0;
+    // Get node data if available
+    const nodeData = treeState.nodeData[node.id];
+    const hasChildren = nodeData?.children?.length > 0;
+    const hasRepresentatives = nodeData?.representatives?.length > 0;
+    const canExpand = hasChildren || hasRepresentatives || !nodeData; // Can expand if we haven't loaded data yet
 
     return (
       <div key={node.id} style={{ marginLeft: `${level * 20}px` }}>
-        <div className={`flex items-center py-2 hover:bg-gray-50 border-b border-gray-100 ${
+        <div className={`flex items-center py-2 hover:bg-gray-50 border-b border-gray-100 cursor-pointer ${
           isSelected ? 'bg-blue-50' : ''
         }`}>
           {/* Toggle button */}
-          {(hasChildren || hasRepresentatives) ? (
+          {canExpand ? (
             <button
-              onClick={() => toggleNode(node.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleNode(node.id);
+              }}
               className="p-1 mr-1 rounded-sm hover:bg-gray-200"
+              disabled={isLoading}
             >
-              {isExpanded ?
-                <ChevronDown className="h-4 w-4 text-gray-500" /> :
+              {isLoading ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-gray-300 border-t-blue-600"></div>
+              ) : isExpanded ? (
+                <ChevronDown className="h-4 w-4 text-gray-500" />
+              ) : (
                 <ChevronRight className="h-4 w-4 text-gray-500" />
-              }
+              )}
             </button>
           ) : (
             <span className="w-6"></span>
           )}
 
-          {/* Node type badge */}
-          <span className={`mr-2 font-bold text-sm px-1.5 py-0.5 rounded ${
-            node.type === 'A' ? 'bg-red-100 text-red-800' :
-            node.type === 'X' ? 'bg-blue-100 text-blue-800' :
-            node.type === 'H' ? 'bg-green-100 text-green-800' :
-            node.type === 'T' ? 'bg-purple-100 text-purple-800' :
-            'bg-yellow-100 text-yellow-800'
-          }`}>
-            {node.type}
-          </span>
+          {/* Node content */}
+          <div
+            className="flex-1 flex items-center"
+            onClick={() => selectNode(node.id)}
+          >
+            {/* Node type badge */}
+            <span className={`mr-2 font-bold text-sm px-1.5 py-0.5 rounded ${
+              node.level === 'A' ? 'bg-red-100 text-red-800' :
+              node.level === 'X' ? 'bg-blue-100 text-blue-800' :
+              node.level === 'H' ? 'bg-green-100 text-green-800' :
+              node.level === 'T' ? 'bg-purple-100 text-purple-800' :
+              'bg-yellow-100 text-yellow-800'
+            }`}>
+              {node.level}
+            </span>
 
-          {/* Node name */}
-          <span className="font-medium">{node.id}</span>
-          <span className="ml-2 text-sm text-gray-700">{node.name}</span>
+            {/* Node name and info */}
+            <span className="font-medium">{node.id}</span>
+            <span className="ml-2 text-sm text-gray-700">{node.name}</span>
+            {node.domainCount !== undefined && (
+              <span className="ml-2 text-xs text-gray-500">
+                ({node.domainCount.toLocaleString()} domain{node.domainCount !== 1 ? 's' : ''})
+              </span>
+            )}
+          </div>
 
           {/* Export button for T and F groups */}
-          {(node.type === 'T' || node.type === 'F') && (
+          {(node.level === 'T' || node.level === 'F') && (
             <button
-              onClick={() => alert(`Exporting ${node.id} to CSV...`)}
-              className="ml-auto flex items-center text-xs text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-50"
+              onClick={(e) => {
+                e.stopPropagation();
+                onExport(node.id);
+              }}
+              className="ml-2 flex items-center text-xs text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-50 border border-blue-200 hover:border-blue-300"
             >
               <Download className="h-3 w-3 mr-1" />
               Export
@@ -479,76 +424,62 @@ function ECODTreeBrowser() {
           )}
         </div>
 
-        {/* Display Pfam mappings for F-groups */}
-        {node.type === 'F' && hasPfamMappings && isExpanded && (
-          <div className="ml-8 py-1.5 pl-2 flex flex-wrap items-center text-xs text-gray-700">
-            <span className="font-medium mr-2">Pfam:</span>
-            {pfamMappings[node.id].map((pfam, idx) => (
-              <a
-                key={idx}
-                href={`https://pfam.xfam.org/family/${pfam.id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="bg-green-50 border border-green-200 rounded px-2 py-0.5 mr-2 mb-1 inline-flex items-center hover:bg-green-100"
-              >
-                <span className="font-medium text-green-700">{pfam.id}</span>
-                <span className="mx-1 text-gray-500">·</span>
-                <span>{pfam.name}</span>
-              </a>
-            ))}
-          </div>
-        )}
-
-        {/* Child nodes */}
-        {isExpanded && hasChildren && (
-          <div>
-            {node.children!.map(child => renderNode(child, level + 1))}
-          </div>
-        )}
-
-        {/* Representative domains for F-groups */}
-        {node.type === 'F' && hasRepresentatives && isExpanded && (
-          <div className="ml-8 border-l-2 border-gray-200 pl-2">
-            <div className="py-2 mt-1">
-              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 flex items-center">
-                <span className="w-2 h-2 rounded-full bg-blue-500 mr-1.5"></span>
-                Representative Domains
+        {/* Expanded content */}
+        {isExpanded && nodeData && (
+          <div className="ml-6">
+            {/* Child nodes */}
+            {hasChildren && (
+              <div>
+                {getFilteredNodes(nodeData.children).map(child =>
+                  renderNode(child, level + 1)
+                )}
               </div>
+            )}
 
-              {representativeDomains[node.id].map(rep => (
-                <div key={rep.id} className="mb-2 border-l-2 border-blue-200 pl-2 bg-blue-50 rounded-r-md">
-                  <div className="flex items-center py-1.5 text-sm">
-                    <Link href={`/domain/${rep.id}`} className="text-blue-600 hover:underline font-medium">{rep.id}</Link>
-                    <span className="ml-2 text-gray-500">[{rep.range}]</span>
-                    <span className="ml-2 text-gray-700 truncate">{rep.description}</span>
-                    <span className="ml-auto text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">
-                      {rep.resolution}
-                    </span>
-                  </div>
+            {/* Representative domains for F-groups */}
+            {hasRepresentatives && node.level === 'F' && (
+              <div className="mt-2 border-l-2 border-gray-200 pl-4">
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center">
+                  <span className="w-2 h-2 rounded-full bg-blue-500 mr-1.5"></span>
+                  Representative Domains ({nodeData.representatives.length})
+                </div>
 
-                  {/* Ligands */}
-                  {rep.ligands && rep.ligands.length > 0 && (
-                    <div className="text-xs text-gray-600 py-1 pl-7 pr-2 flex flex-wrap items-center">
-                      <span className="font-medium mr-1">Ligands:</span>
-                      {rep.ligands.map((ligand, idx) => (
+                {nodeData.representatives.map(rep => (
+                  <div key={rep.id} className="mb-2 border-l-2 border-blue-200 pl-3 bg-blue-50 rounded-r-md py-1.5">
+                    <div className="flex items-center text-sm">
+                      <Link
+                        href={`/domain/${rep.id}`}
+                        className="text-blue-600 hover:underline font-medium"
+                      >
+                        {rep.id}
+                      </Link>
+                      <span className="ml-2 text-gray-500">[{rep.range}]</span>
+                      {rep.pdb_id && (
+                        <span className="ml-2 text-gray-600">
+                          PDB: {rep.pdb_id}{rep.chain && `/${rep.chain}`}
+                        </span>
+                      )}
+                      {rep.uniprot && (
                         <a
-                          key={idx}
-                          href={`https://www.rcsb.org/ligand/${ligand.id}`}
+                          href={`https://www.uniprot.org/uniprotkb/${rep.uniprot}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="bg-yellow-50 border border-yellow-200 rounded px-1 py-0.5 mr-1 mb-1 inline-flex items-center hover:bg-yellow-100"
+                          className="ml-2 text-green-600 hover:text-green-800 text-xs flex items-center"
                         >
-                          <span className="font-medium text-yellow-700">{ligand.id}</span>
-                          <span className="mx-0.5">·</span>
-                          <span>{ligand.name}</span>
-                          {ligand.count > 1 && <span className="ml-0.5 text-yellow-700">×{ligand.count}</span>}
+                          {rep.uniprot}
+                          <ExternalLink className="h-3 w-3 ml-1" />
                         </a>
-                      ))}
+                      )}
+                      {rep.isManual && (
+                        <span className="ml-2 bg-yellow-100 text-yellow-800 text-xs px-1.5 py-0.5 rounded">
+                          Manual
+                        </span>
+                      )}
                     </div>
-                  )}
-                </div>
-              ))}
-            </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -556,45 +487,44 @@ function ECODTreeBrowser() {
   };
 
   return (
-    <div className="border rounded-md overflow-auto max-h-screen bg-white">
+    <div className="border rounded-md overflow-hidden bg-white">
       {/* Legend */}
-      <div className="bg-gray-50 p-2 border-b sticky top-0 z-10">
-        <div className="text-xs text-gray-700 flex flex-wrap items-center gap-3">
-          <span className="font-medium">Structure Types:</span>
+      <div className="bg-gray-50 p-3 border-b">
+        <div className="text-xs text-gray-700 flex flex-wrap items-center gap-4">
+          <span className="font-medium">Legend:</span>
           <div className="inline-flex items-center">
             <span className="w-2 h-2 rounded-full bg-blue-500 mr-1.5"></span>
-            <span>Experimental (PDB)</span>
+            <span>Representative Domains</span>
           </div>
           <div className="inline-flex items-center">
-            <span className="w-2 h-2 rounded-full bg-purple-500 mr-1.5"></span>
-            <span>Theoretical (AlphaFold)</span>
+            <span className="bg-yellow-100 text-yellow-800 text-xs px-1 py-0.5 rounded mr-1"></span>
+            <span>Manual Representative</span>
           </div>
-          <div className="inline-flex items-center ml-3">
-            <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 mr-1"></span>
-            <span>Ligands</span>
-          </div>
-          <div className="inline-flex items-center ml-3">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500 mr-1"></span>
-            <span>Pfam Families</span>
+          <div className="inline-flex items-center">
+            <ExternalLink className="h-3 w-3 text-green-600 mr-1" />
+            <span>External Link</span>
           </div>
         </div>
       </div>
 
-      {/* No data state */}
-      {Object.keys(treeState.nodeData).length === 0 ? (
-        <div className="p-8 text-center">
-          <div className="text-gray-400 mb-2">
-            <Filter className="h-12 w-12 mx-auto" />
+      {/* Tree content */}
+      <div className="max-h-[600px] overflow-y-auto">
+        {treeState.rootNodes.length === 0 ? (
+          <div className="p-8 text-center">
+            <div className="text-gray-400 mb-2">
+              <Filter className="h-12 w-12 mx-auto" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-700 mb-1">No data available</h3>
+            <p className="text-gray-500 text-sm">
+              Unable to load classification tree. Please try refreshing the page.
+            </p>
           </div>
-          <h3 className="text-lg font-medium text-gray-700 mb-1">No nodes loaded</h3>
-          <p className="text-gray-500 text-sm">
-            Use the search box above to find and load classification nodes.
-          </p>
-        </div>
-      ) : (
-        // Render the tree starting with the root node
-        renderNode(treeData)
-      )}
+        ) : (
+          <div className="p-4">
+            {getFilteredNodes(treeState.rootNodes).map(node => renderNode(node))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
