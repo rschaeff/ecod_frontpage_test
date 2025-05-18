@@ -2,21 +2,32 @@
 
 import { createContext, useContext, useReducer, ReactNode, useEffect } from 'react';
 
-// Types for tree nodes and state
+// Types that match the API responses
 interface TreeNode {
   id: string;
   name: string;
-  type: 'A' | 'X' | 'H' | 'T' | 'F';
-  children?: TreeNode[];
+  level: 'A' | 'X' | 'H' | 'T' | 'F';
+  domainCount?: number;
+  parent?: string;
 }
 
-interface RepresentativeNode {
+interface Representative {
   id: string;
   range: string;
-  description: string;
-  structureType: 'experimental' | 'theoretical';
-  resolution?: string;
-  plddt?: string;
+  pdb_id?: string;
+  chain?: string;
+  uniprot: string;
+  isManual: boolean;
+}
+
+interface NodeData {
+  id: string;
+  name: string;
+  level: 'A' | 'X' | 'H' | 'T' | 'F';
+  parent?: string;
+  domainCount: number;
+  children: TreeNode[];
+  representatives: Representative[];
 }
 
 interface ExpandedNodesState {
@@ -24,26 +35,26 @@ interface ExpandedNodesState {
 }
 
 interface TreeState {
+  rootNodes: TreeNode[];
+  nodeData: Record<string, NodeData>;
   expandedNodes: ExpandedNodesState;
   selectedNodeId: string | null;
-  activeFilter: string;
+  activeFilter: 'all' | 'A' | 'X' | 'H' | 'T' | 'F';
   loadingNode: string | null;
-  nodeData: Record<string, TreeNode>;
   error: string | null;
-  representativeNodes: Record<string, RepresentativeNode[]>;
 }
 
 // Types for tree actions
 type TreeAction =
+  | { type: 'SET_ROOT_NODES'; payload: TreeNode[] }
+  | { type: 'SET_NODE_DATA'; payload: { id: string; data: NodeData } }
   | { type: 'TOGGLE_NODE'; payload: string }
   | { type: 'EXPAND_NODE'; payload: string }
   | { type: 'COLLAPSE_NODE'; payload: string }
   | { type: 'SET_SELECTED_NODE'; payload: string | null }
-  | { type: 'SET_ACTIVE_FILTER'; payload: string }
-  | { type: 'FETCH_NODE_START'; payload: string }
-  | { type: 'FETCH_NODE_SUCCESS'; payload: { id: string; data: TreeNode } }
-  | { type: 'FETCH_NODE_ERROR'; payload: string }
-  | { type: 'FETCH_REPRESENTATIVES_SUCCESS'; payload: { nodeId: string; data: RepresentativeNode[] } }
+  | { type: 'SET_ACTIVE_FILTER'; payload: 'all' | 'A' | 'X' | 'H' | 'T' | 'F' }
+  | { type: 'SET_LOADING_NODE'; payload: string | null }
+  | { type: 'SET_ERROR'; payload: string | null }
   | { type: 'COLLAPSE_ALL' }
   | { type: 'EXPAND_ALL' };
 
@@ -54,22 +65,20 @@ interface TreeContextType {
   toggleNode: (nodeId: string) => void;
   selectNode: (nodeId: string | null) => void;
   fetchNodeData: (nodeId: string) => Promise<void>;
-  setActiveFilter: (filter: string) => void;
+  setActiveFilter: (filter: 'all' | 'A' | 'X' | 'H' | 'T' | 'F') => void;
   expandAll: () => void;
   collapseAll: () => void;
 }
 
 // Initial state
 const initialState: TreeState = {
-  expandedNodes: {
-    'A1': true, // Start with Architecture level expanded
-  },
+  rootNodes: [],
+  nodeData: {},
+  expandedNodes: {},
   selectedNodeId: null,
   activeFilter: 'all',
   loadingNode: null,
-  nodeData: {},
-  error: null,
-  representativeNodes: {}
+  error: null
 };
 
 // Create context
@@ -78,6 +87,21 @@ const TreeContext = createContext<TreeContextType | undefined>(undefined);
 // Reducer function
 function treeReducer(state: TreeState, action: TreeAction): TreeState {
   switch (action.type) {
+    case 'SET_ROOT_NODES':
+      return {
+        ...state,
+        rootNodes: action.payload,
+        error: null
+      };
+    case 'SET_NODE_DATA':
+      return {
+        ...state,
+        nodeData: {
+          ...state.nodeData,
+          [action.payload.id]: action.payload.data
+        },
+        error: null
+      };
     case 'TOGGLE_NODE':
       return {
         ...state,
@@ -112,33 +136,16 @@ function treeReducer(state: TreeState, action: TreeAction): TreeState {
         ...state,
         activeFilter: action.payload
       };
-    case 'FETCH_NODE_START':
+    case 'SET_LOADING_NODE':
       return {
         ...state,
         loadingNode: action.payload
       };
-    case 'FETCH_NODE_SUCCESS':
+    case 'SET_ERROR':
       return {
         ...state,
-        loadingNode: null,
-        nodeData: {
-          ...state.nodeData,
-          [action.payload.id]: action.payload.data
-        }
-      };
-    case 'FETCH_NODE_ERROR':
-      return {
-        ...state,
-        loadingNode: null,
-        error: action.payload
-      };
-    case 'FETCH_REPRESENTATIVES_SUCCESS':
-      return {
-        ...state,
-        representativeNodes: {
-          ...state.representativeNodes,
-          [action.payload.nodeId]: action.payload.data
-        }
+        error: action.payload,
+        loadingNode: null
       };
     case 'COLLAPSE_ALL':
       return {
@@ -146,12 +153,22 @@ function treeReducer(state: TreeState, action: TreeAction): TreeState {
         expandedNodes: {}
       };
     case 'EXPAND_ALL': {
-      // Create a record of all nodes expanded
+      // Expand all loaded nodes and root nodes
       const allExpanded: ExpandedNodesState = {};
-      // Expand all nodes in the nodeData
-      Object.keys(state.nodeData).forEach(nodeId => {
-        allExpanded[nodeId] = true;
+
+      // Expand all root nodes
+      state.rootNodes.forEach(node => {
+        allExpanded[node.id] = true;
       });
+
+      // Expand all loaded nodes and their children
+      Object.values(state.nodeData).forEach(nodeData => {
+        allExpanded[nodeData.id] = true;
+        nodeData.children.forEach(child => {
+          allExpanded[child.id] = true;
+        });
+      });
+
       return {
         ...state,
         expandedNodes: allExpanded
@@ -166,10 +183,36 @@ function treeReducer(state: TreeState, action: TreeAction): TreeState {
 export function TreeProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(treeReducer, initialState);
 
-  // Load expanded nodes state from localStorage on mount
+  // Load root nodes when the provider mounts
   useEffect(() => {
-    // Only run in browser environment
-    if (typeof window === 'undefined') return;
+    async function fetchRootNodes() {
+      try {
+        dispatch({ type: 'SET_LOADING_NODE', payload: 'root' });
+        const response = await fetch('/api/tree?level=A');
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch root nodes: ${response.status}`);
+        }
+
+        const data = await response.json();
+        dispatch({ type: 'SET_ROOT_NODES', payload: data.nodes });
+      } catch (error) {
+        console.error('Error fetching root nodes:', error);
+        dispatch({
+          type: 'SET_ERROR',
+          payload: error instanceof Error ? error.message : 'Failed to load tree data'
+        });
+      } finally {
+        dispatch({ type: 'SET_LOADING_NODE', payload: null });
+      }
+    }
+
+    fetchRootNodes();
+  }, []);
+
+  // Load expanded nodes state from localStorage on mount (after root nodes are loaded)
+  useEffect(() => {
+    if (typeof window === 'undefined' || state.rootNodes.length === 0) return;
 
     try {
       const savedExpandedNodes = localStorage.getItem('ecodTreeExpandedNodes');
@@ -184,18 +227,21 @@ export function TreeProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       console.error('Error parsing expanded tree nodes:', e);
     }
-  }, []);
+  }, [state.rootNodes]);
 
   // Save expanded nodes to localStorage when they change
   useEffect(() => {
-    // Only run in browser environment
     if (typeof window === 'undefined') return;
-
     localStorage.setItem('ecodTreeExpandedNodes', JSON.stringify(state.expandedNodes));
   }, [state.expandedNodes]);
 
   const toggleNode = (nodeId: string) => {
     dispatch({ type: 'TOGGLE_NODE', payload: nodeId });
+
+    // If expanding and we don't have data yet, fetch it
+    if (!state.expandedNodes[nodeId] && !state.nodeData[nodeId]) {
+      fetchNodeData(nodeId);
+    }
   };
 
   const selectNode = (nodeId: string | null) => {
@@ -203,14 +249,18 @@ export function TreeProvider({ children }: { children: ReactNode }) {
     if (nodeId) {
       // Automatically expand the node when selected
       dispatch({ type: 'EXPAND_NODE', payload: nodeId });
+      // Fetch node data if we don't have it
+      if (!state.nodeData[nodeId]) {
+        fetchNodeData(nodeId);
+      }
     }
   };
 
-  const setActiveFilter = (filter: string) => {
+  const setActiveFilter = (filter: 'all' | 'A' | 'X' | 'H' | 'T' | 'F') => {
     dispatch({ type: 'SET_ACTIVE_FILTER', payload: filter });
   };
 
-  // Function to fetch node data
+  // Function to fetch node data from the API
   const fetchNodeData = async (nodeId: string) => {
     if (state.nodeData[nodeId]) {
       // Data already loaded, just expand the node
@@ -218,63 +268,44 @@ export function TreeProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    dispatch({ type: 'FETCH_NODE_START', payload: nodeId });
-
     try {
-      // In a real application, this would be an API call
-      // For now, we'll simulate with setTimeout
-      await new Promise(resolve => setTimeout(resolve, 500));
+      dispatch({ type: 'SET_LOADING_NODE', payload: nodeId });
 
-      // Example mock data - in a real app, this would come from your API
-      const mockData: TreeNode = {
-        id: nodeId,
-        name: `Node ${nodeId}`,
-        type: nodeId.charAt(0) as 'A' | 'X' | 'H' | 'T' | 'F',
-        children: [
-          {
-            id: `${nodeId}.1`,
-            name: `Child ${nodeId}.1`,
-            type: 'H',
-          },
-          {
-            id: `${nodeId}.2`,
-            name: `Child ${nodeId}.2`,
-            type: 'H',
-          }
-        ]
+      const response = await fetch(`/api/classification/${nodeId}`);
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch node data: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      // Transform API response to match our NodeData interface
+      const nodeData: NodeData = {
+        id: data.id,
+        name: data.name,
+        level: data.level,
+        parent: data.parent,
+        domainCount: data.domainCount,
+        children: data.children || [],
+        representatives: data.representatives || []
       };
 
       dispatch({
-        type: 'FETCH_NODE_SUCCESS',
-        payload: { id: nodeId, data: mockData }
+        type: 'SET_NODE_DATA',
+        payload: { id: nodeId, data: nodeData }
       });
-
-      // Also fetch representative domains if this is a T or F level node
-      if (nodeId.charAt(0) === 'T' || nodeId.charAt(0) === 'F') {
-        // Mock representative data
-        const representatives: RepresentativeNode[] = [
-          {
-            id: `e${Math.random().toString(36).substring(2, 6)}`,
-            range: 'A:1-150',
-            description: `Example domain for ${nodeId}`,
-            structureType: 'experimental',
-            resolution: '2.1Å'
-          }
-        ];
-
-        dispatch({
-          type: 'FETCH_REPRESENTATIVES_SUCCESS',
-          payload: { nodeId, data: representatives }
-        });
-      }
 
       // Expand the node after data is loaded
       dispatch({ type: 'EXPAND_NODE', payload: nodeId });
+
     } catch (error) {
+      console.error(`Error fetching node ${nodeId}:`, error);
       dispatch({
-        type: 'FETCH_NODE_ERROR',
+        type: 'SET_ERROR',
         payload: error instanceof Error ? error.message : 'Failed to load node data'
       });
+    } finally {
+      dispatch({ type: 'SET_LOADING_NODE', payload: null });
     }
   };
 
