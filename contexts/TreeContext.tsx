@@ -188,14 +188,36 @@ export function TreeProvider({ children }: { children: ReactNode }) {
     async function fetchRootNodes() {
       try {
         dispatch({ type: 'SET_LOADING_NODE', payload: 'root' });
+
+        // Fetch A-level nodes
         const response = await fetch('/api/tree?level=A');
 
         if (!response.ok) {
-          throw new Error(`Failed to fetch root nodes: ${response.status}`);
+          const errorText = await response.text();
+          console.error('Failed to fetch root nodes:', response.status, errorText);
+          throw new Error(`Failed to fetch root nodes: ${response.status} - ${errorText}`);
         }
 
         const data = await response.json();
-        dispatch({ type: 'SET_ROOT_NODES', payload: data.nodes });
+        console.log('Root nodes fetched successfully:', data);
+
+        // Ensure we have nodes array
+        if (!data.nodes || !Array.isArray(data.nodes)) {
+          throw new Error('Invalid response format: nodes array not found');
+        }
+
+        // Transform the data to ensure proper typing
+        const transformedNodes: TreeNode[] = data.nodes.map((node: any) => ({
+          id: node.id,
+          name: node.name,
+          level: node.level,
+          domainCount: node.domainCount || 0,
+          parent: node.parent
+        }));
+
+        dispatch({ type: 'SET_ROOT_NODES', payload: transformedNodes });
+        console.log('Root nodes set in state:', transformedNodes.length, 'nodes');
+
       } catch (error) {
         console.error('Error fetching root nodes:', error);
         dispatch({
@@ -218,6 +240,7 @@ export function TreeProvider({ children }: { children: ReactNode }) {
       const savedExpandedNodes = localStorage.getItem('ecodTreeExpandedNodes');
       if (savedExpandedNodes) {
         const parsedNodes = JSON.parse(savedExpandedNodes);
+        console.log('Loading saved expanded nodes:', parsedNodes);
         for (const nodeId in parsedNodes) {
           if (parsedNodes[nodeId]) {
             dispatch({ type: 'EXPAND_NODE', payload: nodeId });
@@ -236,27 +259,32 @@ export function TreeProvider({ children }: { children: ReactNode }) {
   }, [state.expandedNodes]);
 
   const toggleNode = (nodeId: string) => {
+    console.log('Toggling node:', nodeId);
     dispatch({ type: 'TOGGLE_NODE', payload: nodeId });
 
     // If expanding and we don't have data yet, fetch it
     if (!state.expandedNodes[nodeId] && !state.nodeData[nodeId]) {
+      console.log('Node not expanded and no data, fetching:', nodeId);
       fetchNodeData(nodeId);
     }
   };
 
   const selectNode = (nodeId: string | null) => {
+    console.log('Selecting node:', nodeId);
     dispatch({ type: 'SET_SELECTED_NODE', payload: nodeId });
     if (nodeId) {
       // Automatically expand the node when selected
       dispatch({ type: 'EXPAND_NODE', payload: nodeId });
       // Fetch node data if we don't have it
       if (!state.nodeData[nodeId]) {
+        console.log('Selected node has no data, fetching:', nodeId);
         fetchNodeData(nodeId);
       }
     }
   };
 
   const setActiveFilter = (filter: 'all' | 'A' | 'X' | 'H' | 'T' | 'F') => {
+    console.log('Setting active filter:', filter);
     dispatch({ type: 'SET_ACTIVE_FILTER', payload: filter });
   };
 
@@ -264,20 +292,25 @@ export function TreeProvider({ children }: { children: ReactNode }) {
   const fetchNodeData = async (nodeId: string) => {
     if (state.nodeData[nodeId]) {
       // Data already loaded, just expand the node
+      console.log('Node data already loaded, expanding:', nodeId);
       dispatch({ type: 'EXPAND_NODE', payload: nodeId });
       return;
     }
 
     try {
+      console.log('Fetching node data for:', nodeId);
       dispatch({ type: 'SET_LOADING_NODE', payload: nodeId });
 
       const response = await fetch(`/api/classification/${nodeId}`);
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch node data: ${response.status}`);
+        const errorText = await response.text();
+        console.error('Failed to fetch node data:', response.status, errorText);
+        throw new Error(`Failed to fetch node data: ${response.status} - ${errorText}`);
       }
 
       const data = await response.json();
+      console.log('Node data fetched:', data);
 
       // Transform API response to match our NodeData interface
       const nodeData: NodeData = {
@@ -285,7 +318,7 @@ export function TreeProvider({ children }: { children: ReactNode }) {
         name: data.name,
         level: data.level,
         parent: data.parent,
-        domainCount: data.domainCount,
+        domainCount: data.domainCount || 0,
         children: data.children || [],
         representatives: data.representatives || []
       };
@@ -297,6 +330,7 @@ export function TreeProvider({ children }: { children: ReactNode }) {
 
       // Expand the node after data is loaded
       dispatch({ type: 'EXPAND_NODE', payload: nodeId });
+      console.log('Node data set and expanded:', nodeId);
 
     } catch (error) {
       console.error(`Error fetching node ${nodeId}:`, error);
@@ -310,10 +344,12 @@ export function TreeProvider({ children }: { children: ReactNode }) {
   };
 
   const expandAll = () => {
+    console.log('Expanding all nodes');
     dispatch({ type: 'EXPAND_ALL' });
   };
 
   const collapseAll = () => {
+    console.log('Collapsing all nodes');
     dispatch({ type: 'COLLAPSE_ALL' });
   };
 
