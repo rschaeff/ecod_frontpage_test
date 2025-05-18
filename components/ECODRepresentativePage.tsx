@@ -13,58 +13,12 @@ import AppLayout from '@/components/layout/AppLayout';
 import ErrorState from '@/components/ui/ErrorState';
 import LoadingState from '@/components/ui/LoadingState';
 
-// Types for the manual representative domain view
-interface TaxonomyCount {
-  name: string;
-  count: number;
-  children?: TaxonomyCount[];
-}
-
-interface LengthDistribution {
-  min: number;
-  max: number;
-  mean: number;
-  median: number;
-  bins: {
-    range: string;
-    count: number;
-  }[];
-}
-
-interface ExperimentalDistribution {
-  experimental: number;
-  theoretical: number;
-  unknownMethod: number;
-}
-
-interface ChildDomain {
-  id: string;
-  range: string;
-  pdbId: string;
-  chainId: string;
-  title: string;
-  organism: string;
-  isExperimental: boolean;
-  method: string;
-  resolution?: string;
-  similarity: number;
-  length: number;
-  taxonomy: {
-    kingdom: string;
-    phylum: string;
-    class: string;
-    order: string;
-    family: string;
-    genus: string;
-    species: string;
-  };
-}
-
-interface ManualDomainData {
+// Types for the API responses
+interface RepresentativeData {
   id: string;
   title: string;
   range: string;
-  pdbId: string;
+  structureId: string;
   chainId: string;
   method: string;
   resolution?: string;
@@ -78,13 +32,80 @@ interface ManualDomainData {
     fgroup: { id: string; name: string; };
   };
   organism: string;
-  curationNotes: string;
-  curatedBy: string;
-  curationDate: string;
-  childDomains: ChildDomain[];
-  taxonomyDistribution: TaxonomyCount[];
-  lengthDistribution: LengthDistribution;
-  experimentalDistribution: ExperimentalDistribution;
+  uniprotId?: string;
+  pfamAccession?: string;
+  curation: {
+    notes: string;
+    curator: string;
+    date: string;
+  };
+  isManual: boolean;
+  isRepresentative: boolean;
+}
+
+interface AssociatedDomain {
+  id: string;
+  range: string;
+  pdbId: string;
+  chainId: string;
+  title: string;
+  organism: string;
+  geneSymbol: string;
+  isExperimental: boolean;
+  method: string;
+  resolution?: string;
+  similarity: number;
+  length: number;
+  isManual: boolean;
+  isRepresentative: boolean;
+  uniprotId: string;
+  taxonomy: {
+    kingdom: string;
+    domain: string;
+  };
+}
+
+interface DistributionStats {
+  experimentalDistribution: {
+    experimental: number;
+    theoretical: number;
+    total: number;
+  };
+  lengthDistribution: {
+    min: number;
+    max: number;
+    mean: number;
+    median: number;
+    bins: {
+      range: string;
+      count: number;
+    }[];
+  };
+  taxonomyDistribution: {
+    name: string;
+    count: number;
+    children?: {
+      name: string;
+      count: number;
+    }[];
+  }[];
+}
+
+interface AssociatedDomainsResponse {
+  domains: AssociatedDomain[];
+  pagination: {
+    total: number;
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+  };
+  filters: {
+    showExperimental: boolean;
+    showTheoretical: boolean;
+    taxonomyFilter: string;
+    sortBy: string;
+    sortOrder: string;
+  };
 }
 
 interface RepresentativePageProps {
@@ -94,25 +115,34 @@ interface RepresentativePageProps {
 export default function ECODRepresentativePage({ domainId }: RepresentativePageProps) {
   // State for loading and domain data
   const [loading, setLoading] = useState<boolean>(true);
-  const [domain, setDomain] = useState<ManualDomainData | null>(null);
+  const [domain, setDomain] = useState<RepresentativeData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  
+
+  // State for associated domains and pagination
+  const [associatedDomains, setAssociatedDomains] = useState<AssociatedDomain[]>([]);
+  const [associatedDomainsTotal, setAssociatedDomainsTotal] = useState(0);
+  const [loadingDomains, setLoadingDomains] = useState(false);
+
+  // State for statistics
+  const [stats, setStats] = useState<DistributionStats | null>(null);
+  const [loadingStats, setLoadingStats] = useState(false);
+
   // UI state for tabs and filters
   const [activeTab, setActiveTab] = useState<'overview' | 'children' | 'taxonomy' | 'length'>('overview');
   const [expandedSections, setExpandedSections] = useState<{[key: string]: boolean}>({
     'domain-info': true,
     'curation-notes': true,
-    'experimental-dist': true
+    'experimental-dist': false
   });
-  
+
   // Child domain filter and pagination state
   const [childDomainsFilters, setChildDomainsFilters] = useState({
     showExperimental: true,
     showTheoretical: true,
     taxonomyFilter: 'all',
-    sortBy: 'similarity' as 'similarity' | 'pdbId' | 'length'
+    sortBy: 'similarity' as 'similarity' | 'pdbId' | 'length' | 'organism'
   });
-  
+
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
   const [sortConfig, setSortConfig] = useState<{
@@ -127,149 +157,105 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
     { label: domain.classification.fgroup.id, href: `/tree?id=${domain.classification.fgroup.id}` },
     { label: domain.id }
   ] : [];
-  
+
   // Fetch domain data based on ID
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       setError(null);
-      
+
       try {
-        // In a real implementation, this would fetch from your API
-        // For demo, we'll simulate the API call
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Mock a manually curated representative domain
-        const mockData: ManualDomainData = {
-          id: `m${domainId}`,
-          title: "TBP-like transcription factor",
-          range: "10-180",
-          pdbId: domainId.substring(1, 5).toUpperCase(),
-          chainId: "A",
-          method: "X-ray diffraction",
-          resolution: "1.9Å",
-          length: 171,
-          sequence: "MADEQPQLQNQGQVGQPQVQGQVGQPQVGQPQVGQCIVLTSLGQEKVSALSIIKRPGLDFSILLSNSGRKDDILKIQFPSLCSLPGTGQDGVRVAPGLFVKADLPGDFVCISKGSKFQQYSPVLVAQGKSISKISMEIALKLKENEIAMIIVKNKMDLPELESDQQVD",
-          classification: {
-            architecture: "Alpha+beta proteins",
-            xgroup: { id: "x.1.1", name: "TBP-like" },
-            hgroup: { id: "h.1.1.1", name: "TATA-binding protein-like" },
-            tgroup: { id: "t.1.1.1.1", name: "TATA-binding protein" },
-            fgroup: { id: "f.1.1.1.1.1", name: "TATA-box binding protein family" }
-          },
-          organism: "Homo sapiens",
-          curationNotes: "Manually selected as a high-quality representative domain for the TATA-binding protein family. This structure provides a clear view of the characteristic saddle-shaped DNA binding fold with a 10-stranded antiparallel beta-sheet and has been experimentally validated through both structural and functional studies.",
-          curatedBy: "J. Smith",
-          curationDate: "2023-05-15",
-          childDomains: [
-            {
-              id: "e1cdcA1",
-              range: "10-180",
-              pdbId: "1CDC",
-              chainId: "A",
-              title: "TATA-box binding protein",
-              organism: "Saccharomyces cerevisiae",
-              isExperimental: true,
-              method: "X-ray diffraction",
-              resolution: "2.5Å",
-              similarity: 95,
-              length: 171,
-              taxonomy: {
-                kingdom: "Fungi",
-                phylum: "Ascomycota",
-                class: "Saccharomycetes",
-                order: "Saccharomycetales",
-                family: "Saccharomycetaceae",
-                genus: "Saccharomyces",
-                species: "S. cerevisiae"
-              }
-            },
-            {
-              id: "e2z8uA1",
-              range: "15-178",
-              pdbId: "2Z8U",
-              chainId: "A",
-              title: "TATA-box binding protein",
-              organism: "Drosophila melanogaster",
-              isExperimental: true,
-              method: "X-ray diffraction",
-              resolution: "2.1Å",
-              similarity: 82,
-              length: 164,
-              taxonomy: {
-                kingdom: "Animalia",
-                phylum: "Arthropoda",
-                class: "Insecta",
-                order: "Diptera",
-                family: "Drosophilidae",
-                genus: "Drosophila",
-                species: "D. melanogaster"
-              }
-            },
-            // Add more domains as needed...
-          ],
-          taxonomyDistribution: [
-            {
-              name: "Bacteria",
-              count: 15,
-              children: [
-                { name: "Proteobacteria", count: 6 },
-                { name: "Firmicutes", count: 5 },
-                { name: "Cyanobacteria", count: 3 },
-                { name: "Other", count: 1 }
-              ]
-            },
-            {
-              name: "Archaea",
-              count: 8,
-              children: [
-                { name: "Euryarchaeota", count: 5 },
-                { name: "Crenarchaeota", count: 2 },
-                { name: "Other", count: 1 }
-              ]
-            },
-            {
-              name: "Eukaryota",
-              count: 48,
-              children: [
-                { name: "Fungi", count: 14 },
-                { name: "Metazoa", count: 20 },
-                { name: "Viridiplantae", count: 8 },
-                { name: "Protists", count: 6 }
-              ]
-            }
-          ],
-          lengthDistribution: {
-            min: 140,
-            max: 182,
-            mean: 168.4,
-            median: 170,
-            bins: [
-              { range: "140-150", count: 3 },
-              { range: "151-160", count: 8 },
-              { range: "161-170", count: 32 },
-              { range: "171-180", count: 25 },
-              { range: "181-190", count: 3 }
-            ]
-          },
-          experimentalDistribution: {
-            experimental: 42,
-            theoretical: 29,
-            unknownMethod: 0
-          }
-        };
-        
-        setDomain(mockData);
+        // Fetch basic domain information
+        const response = await fetch(`/api/representative/${domainId}`);
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `Failed to fetch domain: ${response.status}`);
+        }
+
+        const domainData = await response.json();
+        setDomain(domainData);
+
       } catch (err) {
+        console.error('Error fetching domain:', err);
         setError(err instanceof Error ? err.message : 'Failed to load representative domain');
       } finally {
         setLoading(false);
       }
     };
-    
+
     fetchData();
   }, [domainId]);
-  
+
+  // Fetch associated domains when tab changes or filters change
+  useEffect(() => {
+    if (activeTab === 'children' && domain) {
+      fetchAssociatedDomains();
+    }
+  }, [activeTab, domain, currentPage, itemsPerPage, childDomainsFilters, sortConfig]);
+
+  // Fetch statistics when needed
+  useEffect(() => {
+    if ((activeTab === 'taxonomy' || activeTab === 'length' || expandedSections['experimental-dist']) && domain && !stats) {
+      fetchStats();
+    }
+  }, [activeTab, domain, stats, expandedSections]);
+
+  // Function to fetch associated domains
+  const fetchAssociatedDomains = async () => {
+    if (!domain) return;
+
+    setLoadingDomains(true);
+    try {
+      const params = new URLSearchParams({
+        limit: itemsPerPage.toString(),
+        offset: ((currentPage - 1) * itemsPerPage).toString(),
+        showExperimental: childDomainsFilters.showExperimental.toString(),
+        showTheoretical: childDomainsFilters.showTheoretical.toString(),
+        taxonomyFilter: childDomainsFilters.taxonomyFilter,
+        sortBy: sortConfig.key,
+        sortOrder: sortConfig.direction === 'ascending' ? 'asc' : 'desc'
+      });
+
+      const response = await fetch(`/api/representative/${domainId}/domains?${params}`);
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch associated domains: ${response.status}`);
+      }
+
+      const data: AssociatedDomainsResponse = await response.json();
+      setAssociatedDomains(data.domains);
+      setAssociatedDomainsTotal(data.pagination.total);
+
+    } catch (err) {
+      console.error('Error fetching associated domains:', err);
+    } finally {
+      setLoadingDomains(false);
+    }
+  };
+
+  // Function to fetch statistics
+  const fetchStats = async () => {
+    if (!domain) return;
+
+    setLoadingStats(true);
+    try {
+      const response = await fetch(`/api/representative/${domainId}/stats`);
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch statistics: ${response.status}`);
+      }
+
+      const statsData: DistributionStats = await response.json();
+      setStats(statsData);
+
+    } catch (err) {
+      console.error('Error fetching statistics:', err);
+    } finally {
+      setLoadingStats(false);
+    }
+  };
+
   // Toggle section expansion
   const toggleSection = (section: string) => {
     setExpandedSections(prev => ({
@@ -277,57 +263,39 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
       [section]: !prev[section]
     }));
   };
-  
+
   // Filter and pagination logic for child domains
-  const filteredDomains = domain ? domain.childDomains.filter(child => {
-    if (!childDomainsFilters.showExperimental && child.isExperimental) return false;
-    if (!childDomainsFilters.showTheoretical && !child.isExperimental) return false;
-    
-    if (childDomainsFilters.taxonomyFilter !== 'all') {
-      if (child.taxonomy.kingdom.toLowerCase() !== childDomainsFilters.taxonomyFilter.toLowerCase()) {
-        return false;
-      }
-    }
-    
-    return true;
-  }).sort((a, b) => {
-    const aValue = a[sortConfig.key as keyof ChildDomain];
-    const bValue = b[sortConfig.key as keyof ChildDomain];
-    
-    if (sortConfig.direction === 'ascending') {
-      return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
-    } else {
-      return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
-    }
-  }) : [];
-  
-  // Pagination calculations
-  const totalPages = Math.ceil(filteredDomains.length / itemsPerPage);
+  const totalPages = Math.ceil(associatedDomainsTotal / itemsPerPage);
   const indexOfFirstItem = (currentPage - 1) * itemsPerPage;
-  const paginatedDomains = filteredDomains.slice(indexOfFirstItem, indexOfFirstItem + itemsPerPage);
-  
+  const paginatedDomains = associatedDomains; // Already paginated by API
+
   // Generate pagination range
   const paginationRange = [];
   const maxPagesToShow = 5;
   let startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
   let endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
-  
+
   if (endPage - startPage + 1 < maxPagesToShow) {
     startPage = Math.max(1, endPage - maxPagesToShow + 1);
   }
-  
+
   for (let i = startPage; i <= endPage; i++) {
     paginationRange.push(i);
   }
-  
+
   // Handle sorting
   const handleSort = (key: string) => {
-    setSortConfig(prevConfig => ({
-      key,
-      direction: prevConfig.key === key && prevConfig.direction === 'ascending' ? 'descending' : 'ascending'
-    }));
+    const newDirection = sortConfig.key === key && sortConfig.direction === 'ascending' ? 'descending' : 'ascending';
+    setSortConfig({ key, direction: newDirection });
+    setCurrentPage(1); // Reset to first page when sorting
   };
-  
+
+  // Handle filter changes
+  const handleFilterChange = (newFilters: Partial<typeof childDomainsFilters>) => {
+    setChildDomainsFilters(prev => ({ ...prev, ...newFilters }));
+    setCurrentPage(1); // Reset to first page when filtering
+  };
+
   if (loading) {
     return (
       <AppLayout
@@ -341,7 +309,7 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
       </AppLayout>
     );
   }
-  
+
   if (error || !domain) {
     return (
       <AppLayout
@@ -354,14 +322,14 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
           message={error || `We couldn't find representative domain with ID: ${domainId}`}
           actions={
             <div className="flex flex-col space-y-3">
-              <Link 
-                href="/" 
+              <Link
+                href="/"
                 className="bg-blue-600 text-white py-2 px-4 rounded text-center hover:bg-blue-700 transition"
               >
                 Return to Home
               </Link>
-              <Link 
-                href="/search" 
+              <Link
+                href="/search"
                 className="bg-gray-200 text-gray-800 py-2 px-4 rounded text-center hover:bg-gray-300 transition"
               >
                 Search for Domains
@@ -372,7 +340,7 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
       </AppLayout>
     );
   }
-  
+
   return (
     <AppLayout
       title={`${domain.id} - Manual Representative`}
@@ -397,15 +365,15 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
                   {domain.organism} • {domain.length} residues
                 </p>
               </div>
-              
+
               <div className="mt-4 md:mt-0 space-y-1 text-sm text-gray-600">
-                <div><span className="font-medium">PDB:</span> {domain.pdbId} (Chain {domain.chainId})</div>
+                <div><span className="font-medium">PDB:</span> {domain.structureId} (Chain {domain.chainId})</div>
                 <div><span className="font-medium">Method:</span> {domain.method}</div>
-                <div><span className="font-medium">Resolution:</span> {domain.resolution}</div>
+                <div><span className="font-medium">Resolution:</span> {domain.resolution || 'N/A'}</div>
                 <div><span className="font-medium">ECOD:</span> {domain.classification.fgroup.id}</div>
               </div>
             </div>
-            
+
             <div className="flex flex-wrap gap-2 mt-4">
               <span className="text-sm bg-blue-50 text-blue-700 px-3 py-1 rounded-full border border-blue-200">
                 {domain.classification.architecture}
@@ -417,13 +385,13 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
                 {domain.classification.hgroup.name}
               </Link>
               <div className="text-sm bg-yellow-50 text-yellow-700 px-3 py-1 rounded-full border border-yellow-200">
-                {domain.childDomains.length} associated domains
+                {associatedDomainsTotal} associated domains
               </div>
             </div>
           </div>
         </div>
       </section>
-      
+
       {/* Navigation tabs */}
       <section className="mb-6">
         <div className="container mx-auto px-4">
@@ -443,7 +411,7 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
                 }`}
                 onClick={() => setActiveTab('children')}
               >
-                Associated Domains ({domain.childDomains.length})
+                Associated Domains ({associatedDomainsTotal})
               </button>
               <button
                 className={`px-6 py-3 font-medium text-sm whitespace-nowrap ${
@@ -465,7 +433,7 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
           </div>
         </div>
       </section>
-      
+
       {/* Tab content */}
       <section className="mb-8">
         <div className="container mx-auto px-4">
@@ -490,7 +458,7 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
                       </button>
                     </div>
                   </div>
-                  
+
                   {/* Domain 3D visualization (mock) */}
                   <div className="aspect-square bg-gray-100 flex items-center justify-center relative">
                     {/* Mock structure visualization */}
@@ -499,34 +467,34 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
                         {/* Stylized representation of TBP protein domain */}
                         <g transform="translate(100,100)">
                           {/* Main saddle-like beta-sheet structure */}
-                          <path 
-                            d="M-50,-15 C-40,-25 -20,-30 0,-25 C20,-30 40,-25 50,-15 C40,-5 20,0 0,-5 C-20,0 -40,-5 -50,-15 Z" 
-                            fill="#80cbc4" 
-                            stroke="#26a69a" 
+                          <path
+                            d="M-50,-15 C-40,-25 -20,-30 0,-25 C20,-30 40,-25 50,-15 C40,-5 20,0 0,-5 C-20,0 -40,-5 -50,-15 Z"
+                            fill="#80cbc4"
+                            stroke="#26a69a"
                             strokeWidth="1.5"
                           />
-                          <path 
-                            d="M-50,15 C-40,25 -20,30 0,25 C20,30 40,25 50,15 C40,5 20,0 0,5 C-20,0 -40,5 -50,15 Z" 
-                            fill="#80cbc4" 
-                            stroke="#26a69a" 
+                          <path
+                            d="M-50,15 C-40,25 -20,30 0,25 C20,30 40,25 50,15 C40,5 20,0 0,5 C-20,0 -40,5 -50,15 Z"
+                            fill="#80cbc4"
+                            stroke="#26a69a"
                             strokeWidth="1.5"
                           />
-                          
+
                           {/* Alpha helices */}
                           <ellipse cx="-35" cy="-40" rx="12" ry="8" fill="#ef9a9a" stroke="#e57373" strokeWidth="1.5" />
                           <ellipse cx="35" cy="-40" rx="12" ry="8" fill="#ef9a9a" stroke="#e57373" strokeWidth="1.5" />
                           <ellipse cx="-35" cy="40" rx="12" ry="8" fill="#ef9a9a" stroke="#e57373" strokeWidth="1.5" />
                           <ellipse cx="35" cy="40" rx="12" ry="8" fill="#ef9a9a" stroke="#e57373" strokeWidth="1.5" />
-                          
+
                           {/* DNA binding groove */}
-                          <path 
-                            d="M-40,0 C-30,10 -20,15 0,10 C20,15 30,10 40,0" 
-                            fill="none" 
-                            stroke="#90caf9" 
+                          <path
+                            d="M-40,0 C-30,10 -20,15 0,10 C20,15 30,10 40,0"
+                            fill="none"
+                            stroke="#90caf9"
                             strokeWidth="3"
                             strokeLinecap="round"
                           />
-                          
+
                           {/* N and C terminus labels */}
                           <text x="-45" y="-45" fontSize="10" fontWeight="bold">N</text>
                           <text x="40" y="45" fontSize="10" fontWeight="bold">C</text>
@@ -535,10 +503,10 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
                     </div>
                   </div>
                 </div>
-                
+
                 {/* Domain information */}
                 <div className="mt-6 bg-white rounded-lg shadow-md">
-                  <div 
+                  <div
                     className="p-4 border-b flex items-center justify-between cursor-pointer"
                     onClick={() => toggleSection('domain-info')}
                   >
@@ -549,7 +517,7 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
                       <ChevronRight className="h-5 w-5 text-gray-500" />
                     )}
                   </div>
-                  
+
                   {expandedSections['domain-info'] && (
                     <div className="p-4">
                       <div className="space-y-3 text-sm">
@@ -564,7 +532,7 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
                         <div className="grid grid-cols-3 gap-1 border-b pb-2">
                           <div className="font-medium">PDB ID:</div>
                           <div className="col-span-2">
-                            <a 
+                            <a
                               href={`https://www.rcsb.org/structure/${domain.pdbId}`}
                               target="_blank"
                               rel="noreferrer"
@@ -599,7 +567,7 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
                           <div className="col-span-2">
                             <div>{domain.classification.architecture}</div>
                             <div>
-                              <Link 
+                              <Link
                                 href={`/tree?id=${domain.classification.xgroup.id}`}
                                 className="text-blue-600 hover:underline"
                               >
@@ -607,7 +575,7 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
                               </Link>
                             </div>
                             <div>
-                              <Link 
+                              <Link
                                 href={`/tree?id=${domain.classification.hgroup.id}`}
                                 className="text-blue-600 hover:underline"
                               >
@@ -615,7 +583,7 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
                               </Link>
                             </div>
                             <div>
-                              <Link 
+                              <Link
                                 href={`/tree?id=${domain.classification.tgroup.id}`}
                                 className="text-blue-600 hover:underline"
                               >
@@ -623,7 +591,7 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
                               </Link>
                             </div>
                             <div>
-                              <Link 
+                              <Link
                                 href={`/tree?id=${domain.classification.fgroup.id}`}
                                 className="text-blue-600 hover:underline"
                               >
@@ -637,10 +605,10 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
                     </div>
                   )}
                 </div>
-                
+
                 {/* Curation notes */}
                 <div className="mt-6 bg-white rounded-lg shadow-md">
-                  <div 
+                  <div
                     className="p-4 border-b flex items-center justify-between cursor-pointer"
                     onClick={() => toggleSection('curation-notes')}
                   >
@@ -651,23 +619,23 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
                       <ChevronRight className="h-5 w-5 text-gray-500" />
                     )}
                   </div>
-                  
+
                   {expandedSections['curation-notes'] && (
                     <div className="p-4">
                       <div className="flex mb-3">
                         <BookOpen className="h-5 w-5 text-blue-500 mr-2 flex-shrink-0" />
-                        <p className="text-gray-700 text-sm">{domain.curationNotes}</p>
+                        <p className="text-gray-700 text-sm">{domain.curation.notes}</p>
                       </div>
-                      
+
                       <div className="text-xs text-gray-500 flex items-center mt-4">
                         <Clock className="h-3 w-3 mr-1" />
-                        <span>Curated by {domain.curatedBy} on {domain.curationDate}</span>
+                        <span>Curated by {domain.curation.curator} on {domain.curation.date}</span>
                       </div>
                     </div>
                   )}
                 </div>
               </div>
-              
+
               {/* Right column - sequence and quick stats */}
               <div className="lg:col-span-2">
                 {/* Domain sequence */}
@@ -681,7 +649,7 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
                       </button>
                     </div>
                   </div>
-                  
+
                   {/* Sequence display */}
                   <div className="bg-gray-50 p-3 rounded border overflow-x-auto">
                     <div className="font-mono text-sm leading-relaxed whitespace-pre">
@@ -690,12 +658,12 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
                         const start = lineIndex * 50;
                         const lineChars = domain.sequence.slice(start, start + 50);
                         const formattedGroups = [];
-                        
+
                         // Group by 10 characters
                         for (let i = 0; i < lineChars.length; i += 10) {
                           formattedGroups.push(lineChars.slice(i, i + 10));
                         }
-                        
+
                         return (
                           <div key={lineIndex} className="flex mb-1">
                             <div className="w-12 text-right pr-2 font-medium text-gray-500">
@@ -713,55 +681,60 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
                     </div>
                   </div>
                 </div>
-                
+
                 {/* Quick stats cards */}
                 <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
                   {/* Associated domains card */}
                   <div className="bg-white rounded-lg shadow-md p-4">
                     <div className="text-lg font-bold text-blue-600">
-                      {domain.childDomains.length}
+                      {associatedDomainsTotal}
                     </div>
                     <div className="text-sm text-gray-600">Associated domains</div>
                     <div className="mt-2 text-xs text-gray-500">
-                      From {domain.taxonomyDistribution.length} major taxa
+                      From {stats ? stats.taxonomyDistribution.length : 'multiple'} major taxa
                     </div>
-                    <button 
+                    <button
                       className="mt-3 text-xs text-blue-600 flex items-center"
                       onClick={() => setActiveTab('children')}
                     >
                       View all <ChevronRight className="h-3 w-3 ml-1" />
                     </button>
                   </div>
-                  
+
                   {/* Length stats card */}
                   <div className="bg-white rounded-lg shadow-md p-4">
                     <div className="text-lg font-bold text-green-600">
-                      {domain.lengthDistribution.median}
+                      {stats ? stats.lengthDistribution.median : '...'}
                     </div>
                     <div className="text-sm text-gray-600">Median length (aa)</div>
                     <div className="mt-2 text-xs text-gray-500">
-                      Range: {domain.lengthDistribution.min}-{domain.lengthDistribution.max} aa
+                      Range: {stats ? `${stats.lengthDistribution.min}-${stats.lengthDistribution.max}` : '...'} aa
                     </div>
-                    <button 
+                    <button
                       className="mt-3 text-xs text-green-600 flex items-center"
                       onClick={() => setActiveTab('length')}
                     >
                       View distribution <ChevronRight className="h-3 w-3 ml-1" />
                     </button>
                   </div>
-                  
+
                   {/* Experimental stats card */}
                   <div className="bg-white rounded-lg shadow-md p-4">
                     <div className="text-lg font-bold text-amber-600">
-                      {Math.round((domain.experimentalDistribution.experimental / (domain.experimentalDistribution.experimental + domain.experimentalDistribution.theoretical)) * 100)}%
+                      {stats ? Math.round((stats.experimentalDistribution.experimental / stats.experimentalDistribution.total) * 100) : '...'}%
                     </div>
                     <div className="text-sm text-gray-600">Experimental structures</div>
                     <div className="mt-2 text-xs text-gray-500">
-                      {domain.experimentalDistribution.experimental} experimental domains
+                      {stats ? stats.experimentalDistribution.experimental : '...'} experimental domains
                     </div>
-                    <button 
+                    <button
                       className="mt-3 text-xs text-amber-600 flex items-center"
-                      onClick={() => toggleSection('experimental-dist')}
+                      onClick={() => {
+                        toggleSection('experimental-dist');
+                        if (!expandedSections['experimental-dist']) {
+                          fetchStats();
+                        }
+                      }}
                     >
                       View breakdown <ChevronRight className="h-3 w-3 ml-1" />
                     </button>
@@ -770,7 +743,7 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
               </div>
             </div>
           )}
-          
+
           {/* Associated Domains Tab */}
           {activeTab === 'children' && (
             <div>
@@ -779,8 +752,14 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
                 <div className="p-4 border-b">
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="text-sm text-gray-600">
-                      Showing <span className="font-medium">{paginatedDomains.length}</span> of <span className="font-medium">{filteredDomains.length}</span> domains
-                      {totalPages > 1 && ` (page ${currentPage} of ${totalPages})`}
+                      {loadingDomains ? (
+                        <span>Loading...</span>
+                      ) : (
+                        <>
+                          Showing <span className="font-medium">{paginatedDomains.length}</span> of <span className="font-medium">{associatedDomainsTotal}</span> domains
+                          {totalPages > 1 && ` (page ${currentPage} of ${totalPages})`}
+                        </>
+                      )}
                     </div>
 
                     <div className="flex flex-wrap gap-2">
@@ -790,10 +769,7 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
                             type="checkbox"
                             className="mr-1"
                             checked={childDomainsFilters.showExperimental}
-                            onChange={() => setChildDomainsFilters({
-                              ...childDomainsFilters,
-                              showExperimental: !childDomainsFilters.showExperimental
-                            })}
+                            onChange={(e) => handleFilterChange({ showExperimental: e.target.checked })}
                           />
                           <span>Experimental</span>
                         </label>
@@ -803,10 +779,7 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
                             type="checkbox"
                             className="mr-1"
                             checked={childDomainsFilters.showTheoretical}
-                            onChange={() => setChildDomainsFilters({
-                              ...childDomainsFilters,
-                              showTheoretical: !childDomainsFilters.showTheoretical
-                            })}
+                            onChange={(e) => handleFilterChange({ showTheoretical: e.target.checked })}
                           />
                           <span>Theoretical</span>
                         </label>
@@ -815,10 +788,7 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
                       <select
                         className="border text-sm rounded px-2 py-1"
                         value={childDomainsFilters.taxonomyFilter}
-                        onChange={(e) => setChildDomainsFilters({
-                          ...childDomainsFilters,
-                          taxonomyFilter: e.target.value
-                        })}
+                        onChange={(e) => handleFilterChange({ taxonomyFilter: e.target.value })}
                       >
                         <option value="all">All taxa</option>
                         <option value="bacteria">Bacteria</option>
@@ -935,69 +905,99 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {paginatedDomains.map((child) => (
-                        <tr key={child.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 whitespace-nowrap">
-                            <Link
-                              href={`/domain/${child.id}`}
-                              className="text-blue-600 hover:underline font-medium"
-                            >
-                              {child.id}
-                            </Link>
-                            <div className="text-xs text-gray-500">{child.range}</div>
-                          </td>
-                          <td className="px-4 py-3 whitespace-nowrap">
-                            <a
-                              href={`https://www.rcsb.org/structure/${child.pdbId}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-blue-600 hover:underline"
-                            >
-                              {child.pdbId}
-                            </a>
-                            <div className="text-xs text-gray-500">Chain {child.chainId}</div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="text-sm">{child.title}</div>
-                            <div className="text-xs text-gray-500">{child.length} residues</div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="text-sm">{child.organism}</div>
-                            <div className="text-xs text-gray-500">{child.taxonomy.kingdom}</div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center">
-                              <div className={`w-2 h-2 rounded-full mr-2 ${child.isExperimental ? 'bg-green-500' : 'bg-blue-500'}`}></div>
-                              <div className="text-sm">{child.method}</div>
-                            </div>
-                            {child.resolution && (
-                              <div className="text-xs text-gray-500 ml-4">{child.resolution}</div>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-right whitespace-nowrap">
-                            <div className="text-sm font-medium">{child.similarity}%</div>
-                            <div className="w-16 h-2 bg-gray-200 rounded-full inline-block">
-                              <div
-                                className="h-full bg-green-500 rounded-full"
-                                style={{ width: `${child.similarity}%` }}
-                              ></div>
-                            </div>
+                      {loadingDomains ? (
+                        <tr>
+                          <td colSpan={6} className="px-4 py-8 text-center">
+                            <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent mr-2"></div>
+                            Loading associated domains...
                           </td>
                         </tr>
-                      ))}
+                      ) : paginatedDomains.length > 0 ? (
+                        paginatedDomains.map((child) => (
+                          <tr key={child.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <Link
+                                href={`/domain/${child.id}`}
+                                className="text-blue-600 hover:underline font-medium"
+                              >
+                                {child.id}
+                              </Link>
+                              <div className="text-xs text-gray-500">{child.range}</div>
+                              {child.isRepresentative && (
+                                <span className="text-xs bg-green-100 text-green-800 px-1 py-0.5 rounded">Rep</span>
+                              )}
+                              {child.isManual && (
+                                <span className="text-xs bg-purple-100 text-purple-800 px-1 py-0.5 rounded ml-1">Manual</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              {child.pdbId ? (
+                                <>
+                                  <a
+                                    href={`https://www.rcsb.org/structure/${child.pdbId}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-blue-600 hover:underline"
+                                  >
+                                    {child.pdbId}
+                                  </a>
+                                  <div className="text-xs text-gray-500">Chain {child.chainId}</div>
+                                </>
+                              ) : (
+                                <span className="text-gray-400">N/A</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="text-sm">{child.title}</div>
+                              <div className="text-xs text-gray-500">{child.length} residues</div>
+                              {child.geneSymbol && (
+                                <div className="text-xs text-gray-500">Gene: {child.geneSymbol}</div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="text-sm">{child.organism}</div>
+                              <div className="text-xs text-gray-500">{child.taxonomy.kingdom}</div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center">
+                                <div className={`w-2 h-2 rounded-full mr-2 ${child.isExperimental ? 'bg-green-500' : 'bg-blue-500'}`}></div>
+                                <div className="text-sm">{child.method}</div>
+                              </div>
+                              {child.resolution && (
+                                <div className="text-xs text-gray-500 ml-4">{child.resolution}</div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-right whitespace-nowrap">
+                              <div className="text-sm font-medium">{child.similarity}%</div>
+                              <div className="w-16 h-2 bg-gray-200 rounded-full inline-block">
+                                <div
+                                  className="h-full bg-green-500 rounded-full"
+                                  style={{ width: `${child.similarity}%` }}
+                                ></div>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                            No domains found matching the current filters.
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
 
                 {/* Empty state */}
-                {filteredDomains.length === 0 && (
+                {!loadingDomains && associatedDomainsTotal === 0 && (
                   <div className="p-8 text-center">
                     <div className="text-gray-400 mb-2">
                       <Filter className="h-12 w-12 mx-auto" />
                     </div>
-                    <h3 className="text-lg font-medium text-gray-700 mb-1">No domains match the filter criteria</h3>
+                    <h3 className="text-lg font-medium text-gray-700 mb-1">No associated domains found</h3>
                     <p className="text-gray-500 text-sm">
-                      Try changing the filter settings to see more domains.
+                      This representative has no associated domains in the database.
                     </p>
                   </div>
                 )}
