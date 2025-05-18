@@ -5,7 +5,7 @@ import { AppContextProvider } from '@/contexts/AppContextProvider';
 import { ContextDebugger } from '@/utils/ContextDebugger';
 
 /**
- * RootLayout - The top-level layout component that provides context to the entire application
+ * RootProvider - The top-level layout component that provides context to the entire application
  * This should wrap the entire application to ensure all components have access to all contexts
  */
 export default function RootProvider({ children }: PropsWithChildren) {
@@ -17,16 +17,12 @@ export default function RootProvider({ children }: PropsWithChildren) {
     setMounted(true);
   }, []);
 
-  // During initial SSR and first render, return a placeholder
-  if (!mounted) {
-    return <>{children}</>;
-  }
-
-  // Provide contexts to all children once mounted
+  // Always provide contexts, but conditionally render debug tools
+  // This ensures contexts are available during SSR and initial render
   return (
     <AppContextProvider>
       {children}
-      {isDev && <ContextDebugger />}
+      {isDev && mounted && <ContextDebugger />}
     </AppContextProvider>
   );
 }
