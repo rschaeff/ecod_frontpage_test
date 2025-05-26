@@ -137,7 +137,12 @@ export default function EnhancedProteinDetailPage({ proteinId }: ProteinDetailPa
   // Show loading state
   if (loading) {
     return (
-      <AppLayout breadcrumbs={breadcrumbs} activePage="protein">
+        <AppLayout
+            breadcrumbs={breadcrumbs}
+            activePage="protein"
+            title={`${protein.id}: ${protein.name}`}
+            subtitle={`${protein.organism} • ${protein.length} residues`}
+          >
         <div className="container mx-auto px-4 py-8">
           <div className="flex items-center justify-center">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>

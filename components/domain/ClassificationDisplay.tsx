@@ -1,4 +1,8 @@
 // Create components/domain/ClassificationDisplay.tsx
+
+import Link from 'next/link';
+import React from 'react';
+
 interface ClassificationProps {
   classification: {
     architecture: string;
