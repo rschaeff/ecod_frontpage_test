@@ -6,18 +6,18 @@ import {
   Database, Search, Home, Download, HelpCircle, ExternalLink,
   Menu, X, ChevronRight, Info, Eye, BookOpen
 } from 'lucide-react';
-import { ProteinData, ProteinDomain, ViewerOptions } from '@/types/protein';
+import { ProteinChain, ProteinDomain, ViewerOptions, parseProteinId } from '@/types/protein';
 import ProteinStructureViewer from '@/components/protein/ProteinStructureViewer';
 
 interface ProteinPageParams {
   params: {
-    id: string;
+    id: string;  // Should be "2UUB_A" or "2UUB" format
   };
 }
 
 export default function ProteinViewWithId({ params }: ProteinPageParams) {
   const [loading, setLoading] = useState<boolean>(true);
-  const [protein, setProtein] = useState<ProteinData | null>(null);
+  const [protein, setProtein] = useState<ProteinChain | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [highlightedDomain, setHighlightedDomain] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
@@ -40,44 +40,56 @@ export default function ProteinViewWithId({ params }: ProteinPageParams) {
   useEffect(() => {
     setLoading(true);
 
+    // Parse the protein ID to get PDB ID and chain ID
+    const { pdbId, chainId } = parseProteinId(params.id);
+    console.log(`Parsed protein ID: ${params.id} -> PDB: ${pdbId}, Chain: ${chainId}`);
+
     // In a real implementation, this would fetch data from your API
-    // For demo, let's simulate a delay and return mock data
+    // For demo, let's simulate a delay and return corrected mock data
     const timer = setTimeout(() => {
-      // Sample mock data with dynamic ID from params
-      const mockData: ProteinData = {
-        id: params.id.toUpperCase(),
-        uniprotId: "P12345",
-        name: params.id.toUpperCase() === "4UBP" ?
+      // Corrected mock data addressing the issues identified
+      const mockData: ProteinChain = {
+        pdbId: pdbId,
+        chainId: chainId,
+        id: `${pdbId}_${chainId}`,
+        entityId: 1,
+        uniprotId: "P20226",
+        name: pdbId === "4UBP" || pdbId === "2UUB" ?
           "TATA-box-binding protein" :
-          `Protein ${params.id.toUpperCase()}`,
+          `Protein ${pdbId}`,
         organism: "Homo sapiens",
-        length: 339,
-        sequence: "MDQNNSLPPYAQGLASPQGAMTPGIPIFSPMMPYGTGLTPQPIQNTNSLSILEEQQRQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQAVAAAAVQQSTSQQATQGTSGQAPQLFHSQTLTTAPLPGTTPLYPSPMTPMTPITPATPASESSKVDNCSESYNEDNKTFPTEGIQTGAAAAAAAVSYLGYKFSVNQFCGVMNHDLNSKIILDRFSKEQSRLAARKYILGTTVKPHHRICQFKLGPKKFDENRNAVIPKSKIPEFLAQLTEDYGAVKEQVKHYSMGDITDVYVPKTVGKELNQYTPPVSQAEGLQSTETASGSVGNGQESEAGKAQQDEQVDDKDDGDRPKLNGHISSVPGLNERSVSQVNEGSSGSSQDYKYMTTLSDSESEEESQEKKDQEKSEDKSNSEDKPPEIDKESSEEENQSQTSNEQVSSSPSTNGKASPRHVSGEETTDETREEK",
+        // CORRECTED: Use actual sequence length, not domain end position
+        length: 240,  // This should be the ACTUAL chain length
+        sequence: "MDQNNSLPPYAQGLASPQGAMTPGIPIFSPMMPYGTGLTPQPIQNTNSLSILEEQQRQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQAVAAAAVQQSTSQQATQGTSGQAPQLFHSQTLTTAPLPGTTPLYPSPMTPMTPITPATPASESSKVDNCSESYNEDNKTFPTEGIQTGAAAAAAAVSYLGYKFSVNQFCGVMNHDLNSKIILDRFSKEQSRLAARKYILGTTVKPHHRICQFKLGPKKFDENRNAVIPKSKIPEFLAQLTEDY",
         domains: [
           {
-            id: `e${params.id.toLowerCase()}A1`,
-            range: "159-252",
+            id: `e${pdbId.toLowerCase()}${chainId}1`,
+            range: "159-252",  // Chain-relative positions
             rangeStart: 159,
             rangeEnd: 252,
+            chainId: chainId,
             ecod: {
-              xgroup: "X.1.1",
-              hgroup: "H.1.1.1",
-              tgroup: "T.1.1.1.1",
-              fgroup: "F.1.1.1.1.1"
+              architecture: "Alpha proteins",
+              xgroup: "1.1",           // CORRECTED: No X. prefix
+              hgroup: "1.1.1",         // CORRECTED: No H. prefix
+              tgroup: "1.1.1.1",       // CORRECTED: No T. prefix
+              fgroup: "1.1.1.1.1"      // CORRECTED: No F. prefix
             },
             color: "#4285F4",
             description: "TATA-binding protein, N-terminal domain"
           },
           {
-            id: `e${params.id.toLowerCase()}A2`,
-            range: "253-339",
+            id: `e${pdbId.toLowerCase()}${chainId}2`,
+            range: "253-339",  // Chain-relative positions
             rangeStart: 253,
             rangeEnd: 339,
+            chainId: chainId,
             ecod: {
-              xgroup: "X.1.1",
-              hgroup: "H.1.1.1",
-              tgroup: "T.1.1.1.1",
-              fgroup: "F.1.1.1.1.1"
+              architecture: "Alpha proteins",
+              xgroup: "1.1",           // CORRECTED: No X. prefix
+              hgroup: "1.1.1",         // CORRECTED: No H. prefix
+              tgroup: "1.1.1.1",       // CORRECTED: No T. prefix
+              fgroup: "1.1.1.1.2"      // CORRECTED: No F. prefix, different family
             },
             color: "#EA4335",
             description: "TATA-binding protein, C-terminal domain"
@@ -88,12 +100,11 @@ export default function ProteinViewWithId({ params }: ProteinPageParams) {
         releaseDate: "2023-06-15"
       };
 
-      // Only set the protein data if the ID is valid (for demo, we'll accept any)
-      if (params.id) {
+      if (pdbId && chainId) {
         setProtein(mockData);
         setError(null);
       } else {
-        setError("Invalid protein ID");
+        setError("Invalid protein ID format");
         setProtein(null);
       }
 
@@ -106,7 +117,6 @@ export default function ProteinViewWithId({ params }: ProteinPageParams) {
   // Handle domain hover
   const handleDomainHover = (domainId: string | null) => {
     setHighlightedDomain(domainId);
-    // The ProteinStructureViewer will handle highlighting automatically via props
   };
 
   // Handle structure loading completion
@@ -126,7 +136,6 @@ export default function ProteinViewWithId({ params }: ProteinPageParams) {
   // Handle domain clicks from the structure viewer
   const handleDomainClick = (domainId: string) => {
     setHighlightedDomain(domainId);
-    // Could navigate to domain detail page or show more info
   };
 
   // Handle viewer options changes
@@ -205,10 +214,10 @@ export default function ProteinViewWithId({ params }: ProteinPageParams) {
               </svg>
             </div>
             <h2 className="text-xl font-bold text-gray-800 mb-2 text-center">
-              Protein Not Found
+              Protein Chain Not Found
             </h2>
             <p className="text-gray-600 mb-6 text-center">
-              {error || `We couldn't find protein with ID: ${params.id.toUpperCase()}`}
+              {error || `We couldn't find protein chain with ID: ${params.id.toUpperCase()}`}
             </p>
             <div className="flex flex-col space-y-3">
               <Link href="/" className="bg-blue-600 text-white py-2 rounded text-center hover:bg-blue-700 transition">
@@ -223,6 +232,11 @@ export default function ProteinViewWithId({ params }: ProteinPageParams) {
       </div>
     );
   }
+
+  // Calculate coverage percentage correctly
+  const coveragePercent = protein.domains.length > 0 ?
+    Math.round((protein.domains.reduce((sum, d) => sum + (d.rangeEnd - d.rangeStart + 1), 0) / protein.length) * 100) :
+    0;
 
   // If protein data is loaded, render the protein view
   return (
@@ -312,34 +326,39 @@ export default function ProteinViewWithId({ params }: ProteinPageParams) {
           </div>
         </div>
 
-        {/* Protein header */}
+        {/* Protein header - CORRECTED */}
         <section className="py-6">
           <div className="container mx-auto px-4">
             <div className="bg-white rounded-lg shadow-md p-6">
               <div className="flex flex-col md:flex-row md:items-center justify-between mb-4">
                 <div>
                   <h1 className="text-2xl font-bold text-gray-800 flex items-center">
-                    {protein.id}
+                    {protein.id}  {/* Now shows "2UUB_A" instead of just "2UUB" */}
                     <span className="ml-2 text-sm bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
                       PDB
                     </span>
                   </h1>
                   <h2 className="text-xl text-gray-700 mt-1">{protein.name}</h2>
                   <p className="text-gray-600 mt-1">
-                    {protein.organism} • {protein.length} residues
+                    {protein.organism} • {protein.length} residues {/* CORRECTED: actual length */}
+                    <span className="ml-2 text-sm">Chain {protein.chainId}</span>
                   </p>
                 </div>
 
                 <div className="mt-4 md:mt-0 space-y-1 text-sm text-gray-600">
+                  <div><span className="font-medium">PDB ID:</span> {protein.pdbId}</div>
+                  <div><span className="font-medium">Chain:</span> {protein.chainId}</div>
                   <div><span className="font-medium">Method:</span> {protein.method}</div>
                   <div><span className="font-medium">Resolution:</span> {protein.resolution}</div>
                   <div><span className="font-medium">Released:</span> {protein.releaseDate}</div>
-                  <div>
-                    <span className="font-medium">UniProt:</span>
-                    <a href={`https://www.uniprot.org/uniprot/${protein.uniprotId}`} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline ml-1">
-                      {protein.uniprotId}
-                    </a>
-                  </div>
+                  {protein.uniprotId && (
+                    <div>
+                      <span className="font-medium">UniProt:</span>
+                      <a href={`https://www.uniprot.org/uniprot/${protein.uniprotId}`} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline ml-1">
+                        {protein.uniprotId}
+                      </a>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -352,6 +371,9 @@ export default function ProteinViewWithId({ params }: ProteinPageParams) {
                 </Link>
                 <span className="text-sm bg-green-50 text-green-700 px-3 py-1 rounded-full border border-green-200">
                   {protein.domains.map(d => d.ecod.hgroup).filter((v, i, a) => a.indexOf(v) === i).length} H-groups
+                </span>
+                <span className="text-sm bg-purple-50 text-purple-700 px-3 py-1 rounded-full border border-purple-200">
+                  {coveragePercent}% coverage
                 </span>
               </div>
             </div>
@@ -366,7 +388,31 @@ export default function ProteinViewWithId({ params }: ProteinPageParams) {
               <div className="lg:col-span-1">
                 <ProteinStructureViewer
                   ref={proteinStructureViewerRef}
-                  protein={protein}
+                  protein={{
+                    id: protein.id,
+                    uniprotId: protein.uniprotId || '',
+                    name: protein.name,
+                    organism: protein.organism,
+                    length: protein.length,
+                    sequence: protein.sequence,
+                    domains: protein.domains.map(d => ({
+                      id: d.id,
+                      range: d.range,
+                      rangeStart: d.rangeStart,
+                      rangeEnd: d.rangeEnd,
+                      ecod: {
+                        xgroup: d.ecod.xgroup,
+                        hgroup: d.ecod.hgroup,
+                        tgroup: d.ecod.tgroup,
+                        fgroup: d.ecod.fgroup
+                      },
+                      color: d.color,
+                      description: d.description
+                    })),
+                    resolution: protein.resolution || '',
+                    method: protein.method,
+                    releaseDate: protein.releaseDate
+                  }}
                   highlightedDomain={highlightedDomain}
                   viewerOptions={viewerOptions}
                   onViewerOptionsChange={handleViewerOptionsChange}
@@ -383,27 +429,31 @@ export default function ProteinViewWithId({ params }: ProteinPageParams) {
                 <div className="bg-white rounded-lg shadow-md p-4 mb-4">
                   <h3 className="font-medium mb-3">External Resources</h3>
                   <div className="space-y-2">
-                    <a href={`https://www.rcsb.org/structure/${protein.id}`}
+                    <a href={`https://www.rcsb.org/structure/${protein.pdbId}`}
                        target="_blank"
                        rel="noreferrer"
                        className="flex items-center text-blue-600 hover:underline">
                       <ExternalLink className="h-4 w-4 mr-2" />
                       View in RCSB PDB
                     </a>
-                    <a href={`https://www.uniprot.org/uniprot/${protein.uniprotId}`}
-                       target="_blank"
-                       rel="noreferrer"
-                       className="flex items-center text-blue-600 hover:underline">
-                      <ExternalLink className="h-4 w-4 mr-2" />
-                      UniProt Entry
-                    </a>
-                    <a href={`https://alphafold.ebi.ac.uk/entry/${protein.uniprotId}`}
-                       target="_blank"
-                       rel="noreferrer"
-                       className="flex items-center text-blue-600 hover:underline">
-                      <ExternalLink className="h-4 w-4 mr-2" />
-                      AlphaFold Structure
-                    </a>
+                    {protein.uniprotId && (
+                      <a href={`https://www.uniprot.org/uniprot/${protein.uniprotId}`}
+                         target="_blank"
+                         rel="noreferrer"
+                         className="flex items-center text-blue-600 hover:underline">
+                        <ExternalLink className="h-4 w-4 mr-2" />
+                        UniProt Entry
+                      </a>
+                    )}
+                    {protein.uniprotId && (
+                      <a href={`https://alphafold.ebi.ac.uk/entry/${protein.uniprotId}`}
+                         target="_blank"
+                         rel="noreferrer"
+                         className="flex items-center text-blue-600 hover:underline">
+                        <ExternalLink className="h-4 w-4 mr-2" />
+                        AlphaFold Structure
+                      </a>
+                    )}
                   </div>
                 </div>
 
@@ -483,7 +533,7 @@ export default function ProteinViewWithId({ params }: ProteinPageParams) {
                     })}
                   </div>
 
-                  {/* Domain details */}
+                  {/* Domain details - CORRECTED ECOD format */}
                   <div className="mt-8">
                     <h4 className="font-medium mb-2">Domain Details</h4>
                     <div className="space-y-2">
@@ -506,9 +556,11 @@ export default function ProteinViewWithId({ params }: ProteinPageParams) {
                             <div className="flex-1">
                               <div className="font-medium">{domain.description}</div>
                               <div className="text-sm text-gray-500">
-                                <span>ECOD: {domain.ecod.fgroup}</span>
+                                <span>ECOD: {domain.ecod.fgroup}</span> {/* CORRECTED: no F. prefix */}
                                 <span className="mx-2">•</span>
                                 <span>Residues: {domain.range}</span>
+                                <span className="mx-2">•</span>
+                                <span>Chain: {domain.chainId}</span>
                               </div>
                             </div>
                             <Link
@@ -528,7 +580,7 @@ export default function ProteinViewWithId({ params }: ProteinPageParams) {
                 {/* Sequence viewer */}
                 <div className="mt-6 bg-white rounded-lg shadow-md p-4">
                   <div className="flex justify-between items-center mb-3">
-                    <h3 className="text-lg font-medium">Protein Sequence</h3>
+                    <h3 className="text-lg font-medium">Chain {protein.chainId} Sequence</h3>
                     <div>
                       <button className="bg-blue-50 hover:bg-blue-100 text-blue-600 px-3 py-1 rounded text-sm border border-blue-200">
                         <Download className="inline-block h-3 w-3 mr-1" />
@@ -598,7 +650,7 @@ export default function ProteinViewWithId({ params }: ProteinPageParams) {
                     </button>
                     <button className="flex items-center justify-center bg-blue-50 hover:bg-blue-100 text-blue-600 p-3 rounded border border-blue-200">
                       <Download className="h-4 w-4 mr-2" />
-                      FASTA Sequence
+                      Chain FASTA
                     </button>
                     <button className="flex items-center justify-center bg-blue-50 hover:bg-blue-100 text-blue-600 p-3 rounded border border-blue-200">
                       <Download className="h-4 w-4 mr-2" />
