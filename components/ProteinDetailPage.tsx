@@ -6,24 +6,8 @@ import {
   Menu, X, ChevronRight, Info, Eye, BookOpen
 } from 'lucide-react';
 import Link from 'next/link';
-import dynamic from 'next/dynamic';
-import { ProteinData, ProteinDomain, ViewerOptions, ThreeDMolDomain, convertDomainFormat } from '@/types/protein';
-
-// Dynamic import for 3DMol viewer to avoid SSR issues
-const ThreeDMolViewer = dynamic(
-  () => import('@/components/visualization/ThreeDMolViewer'),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="aspect-square bg-gray-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
-          <div className="text-sm text-gray-600">Loading 3D viewer...</div>
-        </div>
-      </div>
-    )
-  }
-);
+import { ProteinData, ProteinDomain, ViewerOptions } from '@/types/protein';
+import ProteinStructureViewer from '@/components/protein/ProteinStructureViewer';
 
 interface ProteinPageParams {
   params: {
@@ -50,7 +34,7 @@ export default function ProteinViewWithId({ params }: ProteinPageParams) {
   });
 
   // Refs for components
-  const structureViewerRef = useRef<any>(null);
+  const proteinStructureViewerRef = useRef<any>(null);
 
   // Fetch protein data based on ID
   useEffect(() => {
@@ -122,18 +106,7 @@ export default function ProteinViewWithId({ params }: ProteinPageParams) {
   // Handle domain hover
   const handleDomainHover = (domainId: string | null) => {
     setHighlightedDomain(domainId);
-
-    // If structure is loaded and we have a domain to highlight
-    if (structureLoaded && structureViewerRef.current && domainId && protein) {
-      const domainIndex = protein.domains.findIndex(d => d.id === domainId);
-      if (domainIndex !== -1) {
-        try {
-          structureViewerRef.current.current?.highlightDomain?.(domainIndex);
-        } catch (err) {
-          console.warn('Error highlighting domain:', err);
-        }
-      }
-    }
+    // The ProteinStructureViewer will handle highlighting automatically via props
   };
 
   // Handle structure loading completion
@@ -148,6 +121,17 @@ export default function ProteinViewWithId({ params }: ProteinPageParams) {
     console.error('Structure loading error:', err);
     setStructureError(err);
     setStructureLoaded(false);
+  };
+
+  // Handle domain clicks from the structure viewer
+  const handleDomainClick = (domainId: string) => {
+    setHighlightedDomain(domainId);
+    // Could navigate to domain detail page or show more info
+  };
+
+  // Handle viewer options changes
+  const handleViewerOptionsChange = (newOptions: ViewerOptions) => {
+    setViewerOptions(newOptions);
   };
 
   // Get color for a specific position in the sequence
