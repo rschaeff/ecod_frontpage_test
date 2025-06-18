@@ -1,35 +1,75 @@
-// types/protein.ts
 export interface ProteinDomain {
-  id: string;         // Domain ID (e.g., e4ubpA1)
-  range: string;      // Residue range (e.g., '1-150')
-  rangeStart: number; // Numeric start of range
-  rangeEnd: number;   // Numeric end of range
-  ecod: {             // ECOD classification
-    xgroup: string;   // X-group (possible homology)
-    hgroup: string;   // H-group (homology)
-    tgroup: string;   // T-group (topology)
-    fgroup: string;   // F-group (family)
+  id: string;
+  range: string;
+  rangeStart: number;
+  rangeEnd: number;
+  ecod: {
+    xgroup: string;
+    hgroup: string;
+    tgroup: string;
+    fgroup: string;
   };
-  color: string;      // Color for visualization
-  description: string; // Domain description/name
+  color: string;
+  description: string;
 }
 
 export interface ProteinData {
-  id: string;          // Protein ID (e.g., PDB ID)
-  uniprotId: string;   // UniProt accession
-  name: string;        // Protein name
-  organism: string;    // Source organism
-  length: number;      // Sequence length
-  sequence: string;    // Full amino acid sequence
-  domains: ProteinDomain[]; // Array of domains in the protein
-  resolution: string;  // Structure resolution (if applicable)
-  method: string;      // Experimental method
-  releaseDate: string; // Structure release date
+  id: string;
+  uniprotId: string;
+  name: string;
+  organism: string;
+  length: number;
+  sequence: string;
+  domains: ProteinDomain[];
+  resolution: string;
+  method: string;
+  releaseDate: string;
 }
 
 export interface ViewerOptions {
-  style: 'cartoon' | 'surface' | 'ball-and-stick';
-  showLabels: boolean;
+  style: 'cartoon' | 'ball-and-stick' | 'surface' | 'spacefill';
+  colorScheme?: 'chain' | 'secondary-structure' | 'residue-type' | 'hydrophobicity';
   showSideChains: boolean;
+  showLigands: boolean;
+  showWater?: boolean;
+  quality?: 'low' | 'medium' | 'high';
+  showLabels: boolean;
   zoom: number;
+}
+
+// Domain format for 3DMol viewer
+export interface ThreeDMolDomain {
+  id: string;
+  chainId: string;
+  start: number;
+  end: number;
+  color: string;
+  label?: string;
+  pdb_range?: string;
+  pdb_start?: string;
+  pdb_end?: string;
+  classification?: {
+    t_group?: string;
+    h_group?: string;
+    x_group?: string;
+    a_group?: string;
+  };
+}
+
+// Convert ProteinDomain to ThreeDMolDomain
+export function convertDomainFormat(domain: ProteinDomain, chainId: string = 'A'): ThreeDMolDomain {
+  return {
+    id: domain.id,
+    chainId: chainId,
+    start: domain.rangeStart,
+    end: domain.rangeEnd,
+    color: domain.color,
+    label: domain.description,
+    classification: {
+      t_group: domain.ecod.tgroup,
+      h_group: domain.ecod.hgroup,
+      x_group: domain.ecod.xgroup,
+      a_group: domain.ecod.fgroup // Architecture level
+    }
+  };
 }

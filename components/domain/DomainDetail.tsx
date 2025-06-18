@@ -12,8 +12,8 @@ import { convertDomainFormat, ThreeDMolDomain } from '@/types/protein';
 // Dynamic import for 3DMol viewer
 const ThreeDMolViewer = dynamic(
   () => import('@/components/visualization/ThreeDMolViewer'),
-  {
-    ssr: false,
+  { 
+    ssr: false, 
     loading: () => (
       <div className="h-96 bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -127,7 +127,7 @@ const AppLayout: React.FC<{
               <h1 className="text-2xl font-bold">ECOD</h1>
               <p className="hidden md:block ml-2 text-sm">Evolutionary Classification of Protein Domains</p>
             </div>
-
+            
             {/* Desktop navigation */}
             <nav className="hidden md:flex space-x-6">
               <Link href="/" className="flex items-center hover:text-blue-200">
@@ -147,16 +147,16 @@ const AppLayout: React.FC<{
                 Lab Homepage
               </a>
             </nav>
-
+            
             {/* Mobile menu button */}
-            <button
+            <button 
               className="md:hidden rounded-md p-2 hover:bg-blue-600 focus:outline-none"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             >
               {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
             </button>
           </div>
-
+          
           {/* Mobile navigation */}
           {mobileMenuOpen && (
             <nav className="md:hidden mt-4 pb-2 space-y-3">
@@ -227,9 +227,9 @@ const AppLayout: React.FC<{
   );
 };
 
-const LoadingState: React.FC<{ message: string; size?: 'small' | 'medium' | 'large' }> = ({
-  message,
-  size = 'medium'
+const LoadingState: React.FC<{ message: string; size?: 'small' | 'medium' | 'large' }> = ({ 
+  message, 
+  size = 'medium' 
 }) => {
   const sizeClasses = {
     small: 'h-6 w-6',
@@ -247,10 +247,10 @@ const LoadingState: React.FC<{ message: string; size?: 'small' | 'medium' | 'lar
   );
 };
 
-const ErrorState: React.FC<{
-  title: string;
-  message: string;
-  actions?: React.ReactNode
+const ErrorState: React.FC<{ 
+  title: string; 
+  message: string; 
+  actions?: React.ReactNode 
 }> = ({ title, message, actions }) => (
   <div className="flex items-center justify-center p-8">
     <div className="max-w-md w-full bg-white rounded-lg shadow-md p-6">
@@ -594,7 +594,7 @@ export default function DomainDetail({ params }: DomainPageParams) {
                 <div className="space-y-3">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Style</label>
-                    <select
+                    <select 
                       className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
                       value={viewerOptions.style}
                       onChange={(e) => updateViewerOptions({ style: e.target.value as any })}
@@ -605,7 +605,7 @@ export default function DomainDetail({ params }: DomainPageParams) {
                       <option value="spacefill">Space Fill</option>
                     </select>
                   </div>
-
+                  
                   <div className="flex items-center">
                     <input
                       type="checkbox"
@@ -616,7 +616,7 @@ export default function DomainDetail({ params }: DomainPageParams) {
                     />
                     <label htmlFor="showSideChains" className="text-sm text-gray-700">Show Side Chains</label>
                   </div>
-
+                  
                   <div className="flex items-center">
                     <input
                       type="checkbox"
@@ -627,7 +627,7 @@ export default function DomainDetail({ params }: DomainPageParams) {
                     />
                     <label htmlFor="showLigands" className="text-sm text-gray-700">Show Ligands</label>
                   </div>
-
+                  
                   <button
                     onClick={resetViewerOptions}
                     className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded text-sm transition-colors"
@@ -650,7 +650,7 @@ export default function DomainDetail({ params }: DomainPageParams) {
                       <div className="text-xs text-gray-500">Architecture</div>
                     </div>
                   </div>
-
+                  
                   <div className="flex items-center">
                     <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center font-bold mr-2 text-sm">
                       X
@@ -663,7 +663,7 @@ export default function DomainDetail({ params }: DomainPageParams) {
                     </div>
                     <div className="text-xs text-gray-500">{domain.classification.xgroup.id}</div>
                   </div>
-
+                  
                   <div className="flex items-center">
                     <div className="w-6 h-6 rounded-full bg-green-100 text-green-800 flex items-center justify-center font-bold mr-2 text-sm">
                       H
@@ -676,7 +676,7 @@ export default function DomainDetail({ params }: DomainPageParams) {
                     </div>
                     <div className="text-xs text-gray-500">{domain.classification.hgroup.id}</div>
                   </div>
-
+                  
                   <div className="flex items-center">
                     <div className="w-6 h-6 rounded-full bg-yellow-100 text-yellow-800 flex items-center justify-center font-bold mr-2 text-sm">
                       T
@@ -689,7 +689,7 @@ export default function DomainDetail({ params }: DomainPageParams) {
                     </div>
                     <div className="text-xs text-gray-500">{domain.classification.tgroup.id}</div>
                   </div>
-
+                  
                   <div className="flex items-center">
                     <div className="w-6 h-6 rounded-full bg-purple-100 text-purple-800 flex items-center justify-center font-bold mr-2 text-sm">
                       F
@@ -868,7 +868,7 @@ export default function DomainDetail({ params }: DomainPageParams) {
                     {Array.from({ length: Math.ceil(domain.sequence.length / 50) }).map((_, lineIndex) => {
                       const lineStart = lineIndex * 50;
                       const lineChars = domain.sequence.slice(lineStart, lineStart + 50);
-
+                      
                       return (
                         <div key={lineIndex} className="flex">
                           <div className="w-12 text-right pr-2 font-medium text-gray-500">
@@ -878,9 +878,9 @@ export default function DomainDetail({ params }: DomainPageParams) {
                             {Array.from(lineChars).map((char, i) => {
                               const position = domain.rangeStart + lineStart + i;
                               const isHighlighted = highlightedPosition === position;
-
+                              
                               return (
-                                <span
+                                <span 
                                   key={i}
                                   className={`cursor-pointer ${isHighlighted ? 'bg-blue-200' : 'hover:bg-gray-200'}`}
                                   onClick={() => handleSequencePositionSelect(position)}
@@ -923,7 +923,7 @@ export default function DomainDetail({ params }: DomainPageParams) {
 
                 <div className="space-y-2">
                   {domain.similar.map(similar => (
-                    <div
+                    <div 
                       key={similar.id}
                       className="border rounded-md p-3 hover:border-gray-300 transition-all"
                     >
@@ -945,7 +945,7 @@ export default function DomainDetail({ params }: DomainPageParams) {
                             ></div>
                           </div>
                         </div>
-                        <Link
+                        <Link 
                           href={`/domain/${similar.id}`}
                           className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-sm hover:bg-blue-100"
                         >
