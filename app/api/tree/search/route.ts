@@ -6,12 +6,14 @@ import { query } from '@/lib/db';
  * API route to search for classification nodes across the tree
  * GET /api/tree/search?q=globin - Search for nodes with "globin" in their name or ID
  */
+// app/api/tree/search/route.ts - Simplified version without confusing suggestions
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const q = searchParams.get('q');
-    const includeNodes = searchParams.get('includeNodes') !== 'false'; // NEW
-    const includeDomains = searchParams.get('includeDomains') !== 'false'; // NEW
+    const includeNodes = searchParams.get('includeNodes') !== 'false';
+    const includeDomains = searchParams.get('includeDomains') !== 'false';
 
     if (!q) {
       return NextResponse.json(
@@ -23,11 +25,10 @@ export async function GET(request: Request) {
     const results: any = {
       query: q,
       nodes: [],
-      domains: [],
-      suggestions: []
+      domains: []
     };
 
-    // 1. Search classification nodes (existing + enhanced)
+    // 1. Search classification nodes - using same logic as main search
     if (includeNodes) {
       const nodeSearchQuery = `
         SELECT
@@ -36,17 +37,18 @@ export async function GET(request: Request) {
           type,
           parent,
           domain_number,
-          -- Relevance scoring for nodes
+          -- Same relevance scoring as main search for consistency
           (CASE
-            WHEN id ILIKE $1 THEN 100        -- Exact ID match
-            WHEN name ILIKE $2 THEN 90       -- Exact name match
-            WHEN name ILIKE $1 THEN 80       -- Name contains query
-            ELSE 50                          -- General match
+            WHEN LOWER(id) = LOWER($1) THEN 100        -- Exact ID match
+            WHEN LOWER(name) = LOWER($1) THEN 95       -- Exact name match
+            WHEN LOWER(id) LIKE LOWER($2) THEN 90      -- ID contains query
+            WHEN LOWER(name) LIKE LOWER($2) THEN 85    -- Name contains query
+            ELSE 50                                    -- General match
           END) as relevance_score
         FROM public.cluster
         WHERE
-          id ILIKE $1
-          OR name ILIKE $1
+          LOWER(id) ILIKE LOWER($2)
+          OR LOWER(name) ILIKE LOWER($2)
         ORDER BY
           relevance_score DESC,
           CASE type
@@ -58,10 +60,10 @@ export async function GET(request: Request) {
             ELSE 6
           END,
           id
-        LIMIT 10
+        LIMIT 15
       `;
 
-      const nodeResult = await query(nodeSearchQuery, [`%${q}%`, q]);
+      const nodeResult = await query(nodeSearchQuery, [q, `%${q}%`]);
       results.nodes = nodeResult.rows.map(node => ({
         id: node.id,
         name: node.name,
@@ -72,7 +74,7 @@ export async function GET(request: Request) {
       }));
     }
 
-    // 2. Search domains that match the query (NEW)
+    // 2. Search domains - using same logic as main search
     if (includeDomains) {
       const domainSearchQuery = `
         (SELECT
@@ -83,16 +85,17 @@ export async function GET(request: Request) {
           'F' as classification_level,
           'pdb' as source_type,
           (CASE
-            WHEN id ILIKE $1 THEN 100
-            WHEN fname ILIKE $2 THEN 90
-            WHEN fname ILIKE $1 THEN 80
+            WHEN LOWER(id) = LOWER($1) THEN 100
+            WHEN LOWER(fname) = LOWER($1) THEN 95
+            WHEN LOWER(id) LIKE LOWER($2) THEN 90
+            WHEN LOWER(fname) LIKE LOWER($2) THEN 85
             ELSE 50
           END) as relevance_score
         FROM public.view_dom_clsrel_pdbinfo
         WHERE
-          id ILIKE $1
-          OR fname ILIKE $1
-        LIMIT 5)
+          LOWER(id) ILIKE LOWER($2)
+          OR LOWER(fname) ILIKE LOWER($2)
+        LIMIT 8)
 
         UNION ALL
 
@@ -104,22 +107,23 @@ export async function GET(request: Request) {
           'F' as classification_level,
           'csm' as source_type,
           (CASE
-            WHEN id ILIKE $1 THEN 100
-            WHEN fname ILIKE $2 THEN 90
-            WHEN fname ILIKE $1 THEN 80
+            WHEN LOWER(id) = LOWER($1) THEN 100
+            WHEN LOWER(fname) = LOWER($1) THEN 95
+            WHEN LOWER(id) LIKE LOWER($2) THEN 90
+            WHEN LOWER(fname) LIKE LOWER($2) THEN 85
             ELSE 50
           END) as relevance_score
         FROM public.view_dom_clsrel_csminfo
         WHERE
-          id ILIKE $1
-          OR fname ILIKE $1
-        LIMIT 5)
+          LOWER(id) ILIKE LOWER($2)
+          OR LOWER(fname) ILIKE LOWER($2)
+        LIMIT 8)
 
         ORDER BY relevance_score DESC, id
-        LIMIT 10
+        LIMIT 15
       `;
 
-      const domainResult = await query(domainSearchQuery, [`%${q}%`, q]);
+      const domainResult = await query(domainSearchQuery, [q, `%${q}%`]);
       results.domains = domainResult.rows.map(domain => ({
         id: domain.id,
         range: domain.range,
@@ -131,37 +135,19 @@ export async function GET(request: Request) {
       }));
     }
 
-    // 3. Generate search suggestions (NEW)
-    if (results.nodes.length === 0 && results.domains.length === 0) {
-      const suggestionQuery = `
-        SELECT DISTINCT name, type, id
-        FROM public.cluster
-        WHERE name ILIKE $1
-        ORDER BY
-          CASE type
-            WHEN 'F' THEN 1
-            WHEN 'T' THEN 2
-            WHEN 'H' THEN 3
-            WHEN 'X' THEN 4
-            WHEN 'A' THEN 5
-          END,
-          name
-        LIMIT 5
-      `;
-
-      const suggestionResult = await query(suggestionQuery, [`%${q.split('').join('%')}%`]);
-      results.suggestions = suggestionResult.rows.map(s => ({
-        id: s.id,
-        name: s.name,
-        type: s.type
-      }));
-    }
+    // Add search metadata
+    results.resultCount = results.nodes.length + results.domains.length;
+    results.hasResults = results.resultCount > 0;
 
     return NextResponse.json(results);
+
   } catch (error) {
-    console.error('Error in enhanced tree search:', error);
+    console.error('Error in tree search:', error);
     return NextResponse.json(
-      { error: 'Failed to perform tree search' },
+      {
+        error: 'Failed to perform tree search',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     );
   }
