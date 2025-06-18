@@ -127,32 +127,39 @@ export default function ECODTreePage() {
                   ) : searchResults.length > 0 ? (
                     <ul>
                       {searchResults.map(result => (
-                        <li key={result.id} className="border-b last:border-b-0">
-                          <button
-                            className="w-full text-left px-4 py-2 hover:bg-gray-100"
-                            onClick={() => handleSearchResultClick(result)}
-                          >
-                            <div className="flex items-center">
-                              <span className={`inline-block w-6 h-6 rounded-full mr-2 text-center text-xs font-bold ${
-                                result.level === 'A' ? 'bg-red-100 text-red-800' :
-                                result.level === 'X' ? 'bg-blue-100 text-blue-800' :
-                                result.level === 'H' ? 'bg-green-100 text-green-800' :
-                                result.level === 'T' ? 'bg-purple-100 text-purple-800' :
-                                'bg-yellow-100 text-yellow-800'
-                              }`}>
-                                {result.level}
-                              </span>
-                              <span className="font-medium">{result.id}</span>
-                              <span className="ml-2 text-gray-600">{result.name}</span>
-                              {result.domainCount && (
-                                <span className="ml-auto text-xs text-gray-500">
-                                  {result.domainCount.toLocaleString()} domains
+                          <li key={result.id} className="border-b last:border-b-0">
+                            <button
+                              className="w-full text-left px-4 py-2 hover:bg-gray-100"
+                              onClick={() => handleSearchResultClick(result)}
+                            >
+                              <div className="flex items-center">
+                                {/* Classification level badge */}
+                                <span className={`inline-block w-6 h-6 rounded-full mr-2 text-center text-xs font-bold ${
+                                  result.level === 'A' ? 'bg-red-100 text-red-800' :
+                                  result.level === 'X' ? 'bg-blue-100 text-blue-800' :
+                                  result.level === 'H' ? 'bg-green-100 text-green-800' :
+                                  result.level === 'T' ? 'bg-purple-100 text-purple-800' :
+                                  'bg-yellow-100 text-yellow-800'
+                                }`}>
+                                  {result.level}
                                 </span>
-                              )}
-                            </div>
-                          </button>
-                        </li>
-                      ))}
+
+                                {/* ID and Name - properly separated */}
+                                <div className="flex-1">
+                                  <span className="font-medium text-gray-900">{result.id}</span>
+                                  <span className="ml-2 text-gray-600">{result.name}</span>
+                                </div>
+
+                                {/* Domain count - only show if it exists and is > 0 */}
+                                {result.domainCount && result.domainCount > 0 && (
+                                  <span className="ml-2 text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                                    {result.domainCount.toLocaleString()} domain{result.domainCount !== 1 ? 's' : ''}
+                                  </span>
+                                )}
+                              </div>
+                            </button>
+                          </li>
+                        ))}
                     </ul>
                   ) : (
                     <div className="p-4 text-center text-gray-500">
