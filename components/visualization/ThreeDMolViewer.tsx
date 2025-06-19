@@ -1,3 +1,5 @@
+// Updated ThreeDMolViewer.tsx - Focus on protein chain only
+
 'use client'
 
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
@@ -16,7 +18,6 @@ const DOMAIN_COLORS = [
   '#336699', // Steel Blue
 ];
 
-// Updated Domain interface with PDB-specific fields
 export interface Domain {
   id: string;
   chainId: string;
@@ -24,7 +25,6 @@ export interface Domain {
   end: number;
   color: string;
   label?: string;
-  // PDB-specific fields for accurate structure selection
   pdb_range?: string;
   pdb_start?: string;
   pdb_end?: string;
@@ -36,7 +36,6 @@ export interface Domain {
   };
 }
 
-// Viewer props
 interface ThreeDMolViewerProps {
   pdbId: string;
   chainId?: string;
@@ -84,144 +83,86 @@ const ThreeDMolViewer = forwardRef<any, ThreeDMolViewerProps>(({
     }
   };
 
-  // Parse chain mapping from mmCIF data
-  const parseChainMapping = (mmcifData: string) => {
-    const mapping = new Map<string, string>(); // auth_chain -> asym_id
-
-    try {
-      // Look for the _pdbx_poly_seq_scheme block
-      const lines = mmcifData.split('\n');
-      let inPolySeqScheme = false;
-      let headerIndices: { [key: string]: number } = {};
-
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-
-        // Start of the block
-        if (line.startsWith('_pdbx_poly_seq_scheme.')) {
-          inPolySeqScheme = true;
-          const field = line.substring('_pdbx_poly_seq_scheme.'.length);
-          headerIndices[field] = Object.keys(headerIndices).length;
-          continue;
-        }
-
-        // End of block (empty line or new section)
-        if (inPolySeqScheme && (line === '' || line.startsWith('_') || line.startsWith('#'))) {
-          break;
-        }
-
-        // Parse data line
-        if (inPolySeqScheme && line && !line.startsWith('_') && !line.startsWith('#')) {
-          const parts = line.split(/\s+/);
-
-          if (parts.length >= Math.max(headerIndices['asym_id'] || 0, headerIndices['pdb_strand_id'] || 0)) {
-            const asymId = parts[headerIndices['asym_id']] || '';
-            const authChain = parts[headerIndices['pdb_strand_id']] || '';
-
-            if (asymId && authChain && authChain !== '.') {
-              mapping.set(authChain, asymId);
-            }
-          }
-        }
-      }
-
-      debugLog('Parsed chain mapping from mmCIF:', Object.fromEntries(mapping));
-      return mapping;
-    } catch (error) {
-      debugLog('Error parsing chain mapping:', error);
-      return mapping;
-    }
-  };
-
   // Analyze structure to understand residue numbering and available chains
   const analyzeStructure = (viewer: any, targetChain?: string, mmcifData?: string) => {
     try {
       // Get all atoms first to see what chains are available
       const allAtoms = viewer.selectedAtoms({});
-      const allChains = [...new Set(allAtoms.map((atom: any) => atom.chain))];
+      const chainInfo = new Map();
 
-      debugLog(`Available chains in structure: ${allChains.join(', ')}`);
+      // Analyze each chain to determine if it's protein, DNA, RNA, etc.
+      allAtoms.forEach((atom: any) => {
+        if (!chainInfo.has(atom.chain)) {
+          chainInfo.set(atom.chain, {
+            chain: atom.chain,
+            atomCount: 0,
+            caCount: 0,
+            pCount: 0,
+            residues: new Set(),
+            atomTypes: new Set()
+          });
+        }
 
-      // Parse chain mapping from mmCIF if available
-      let chainMapping = new Map<string, string>();
-      if (mmcifData) {
-        chainMapping = parseChainMapping(mmcifData);
-      }
+        const info = chainInfo.get(atom.chain);
+        info.atomCount++;
+        info.atomTypes.add(atom.atom);
 
-      // Find the best chain to use
+        if (atom.atom === 'CA') info.caCount++;  // Protein alpha carbon
+        if (atom.atom === 'P') info.pCount++;    // Nucleic acid phosphorus
+        if (atom.resi) info.residues.add(atom.resi);
+      });
+
+      // Classify chains
+      const chains = Array.from(chainInfo.values()).map(info => ({
+        ...info,
+        residueCount: info.residues.size,
+        isProtein: info.caCount > 10, // Has many CA atoms = protein
+        isNucleicAcid: info.pCount > 5, // Has many P atoms = DNA/RNA
+        proteinScore: info.caCount / Math.max(info.atomCount, 1),
+        nucAcidScore: info.pCount / Math.max(info.atomCount, 1)
+      }));
+
+      debugLog('Chain analysis:', chains);
+
+      // Find the best protein chain
       let actualChain = targetChain;
 
-      if (targetChain && !allChains.includes(targetChain)) {
-        debugLog(`Requested chain ${targetChain} not found in structure`);
-
-        // First, try the chain mapping from mmCIF
-        if (chainMapping.has(targetChain)) {
-          const mappedChain = chainMapping.get(targetChain);
-          if (mappedChain && allChains.includes(mappedChain)) {
-            actualChain = mappedChain;
-            debugLog(`Found mmCIF mapping: ${targetChain} -> ${actualChain}`);
-          }
-        }
-
-        // If mapping didn't work, try reverse mapping (asym_id -> auth_chain)
-        if (actualChain === targetChain) {
-          for (const [authChain, asymId] of chainMapping.entries()) {
-            if (asymId === targetChain && allChains.includes(authChain)) {
-              actualChain = authChain;
-              debugLog(`Found reverse mmCIF mapping: ${targetChain} -> ${actualChain}`);
-              break;
-            }
-          }
-        }
-
-        // If still no match, fall back to the most protein-like chain
-        if (actualChain === targetChain) {
-          const chainAnalysis = allChains.map(chain => {
-            const atoms = viewer.selectedAtoms({chain});
-            const residues = [...new Set(atoms.map((atom: any) => atom.resi).filter(r => r))];
-            const caAtoms = atoms.filter((atom: any) => atom.atom === 'CA');
-
-            return {
-              chain,
-              atomCount: atoms.length,
-              residueCount: residues.length,
-              caCount: caAtoms.length,
-              isProteinLike: caAtoms.length > 50
-            };
-          });
-
-          // Sort by protein-like properties
-          chainAnalysis.sort((a, b) => {
-            if (a.isProteinLike !== b.isProteinLike) {
-              return a.isProteinLike ? -1 : 1;
-            }
-            return b.caCount - a.caCount;
-          });
-
-          if (chainAnalysis.length > 0) {
-            actualChain = chainAnalysis[0].chain;
-            debugLog(`Fallback to most protein-like chain: ${actualChain}`);
-          }
+      if (targetChain) {
+        const targetInfo = chains.find(c => c.chain === targetChain);
+        if (!targetInfo) {
+          debugLog(`Target chain ${targetChain} not found`);
+          actualChain = null;
+        } else if (!targetInfo.isProtein) {
+          debugLog(`Target chain ${targetChain} is not a protein (CA count: ${targetInfo.caCount})`);
+          // Don't override - user explicitly requested this chain
         }
       }
 
-      if (!actualChain && allChains.length > 0) {
-        actualChain = allChains[0];
-        debugLog(`Using first available chain: ${actualChain}`);
-      }
-
+      // If no target chain or target not found, find best protein chain
       if (!actualChain) {
-        debugLog('No chains found in structure');
-        return null;
+        const proteinChains = chains
+          .filter(c => c.isProtein)
+          .sort((a, b) => b.caCount - a.caCount);
+
+        if (proteinChains.length > 0) {
+          actualChain = proteinChains[0].chain;
+          debugLog(`Auto-selected protein chain: ${actualChain} (${proteinChains[0].caCount} CA atoms)`);
+        } else {
+          // No protein chains found - this might be DNA/RNA only structure
+          const allChainsList = chains.map(c => c.chain).join(', ');
+          const error = `No protein chains found in structure. Available chains: ${allChainsList}`;
+          debugLog(error);
+          throw new Error(error);
+        }
       }
 
-      // Analyze the target chain
+      // Analyze the selected chain
+      const targetChainInfo = chains.find(c => c.chain === actualChain);
+      if (!targetChainInfo) {
+        throw new Error(`Chain ${actualChain} not found`);
+      }
+
       const atoms = viewer.selectedAtoms({chain: actualChain});
-      if (atoms.length === 0) {
-        debugLog(`No atoms found for chain ${actualChain}`);
-        return null;
-      }
-
       const residues = new Set<number>();
       atoms.forEach((atom: any) => {
         if (atom.resi) {
@@ -237,7 +178,9 @@ const ThreeDMolViewer = forwardRef<any, ThreeDMolViewerProps>(({
         maxResidue: sortedResidues[sortedResidues.length - 1],
         totalResidues: sortedResidues.length,
         residueList: sortedResidues,
-        allChains
+        allChains: chains.map(c => c.chain),
+        chainType: targetChainInfo.isProtein ? 'protein' :
+                   targetChainInfo.isNucleicAcid ? 'nucleic acid' : 'unknown'
       };
 
       debugLog(`Structure analysis for chain ${actualChain}:`, info);
@@ -265,23 +208,6 @@ const ThreeDMolViewer = forwardRef<any, ThreeDMolViewerProps>(({
     if (mappedStart >= structureInfo.minResidue && mappedEnd <= structureInfo.maxResidue) {
       debugLog(`Mapped sequence ${seqStart}-${seqEnd} to structure ${mappedStart}-${mappedEnd}`);
       return `${mappedStart}-${mappedEnd}`;
-    }
-
-    // Try relative mapping (sequence position relative to structure length)
-    const seqLength = seqEnd - seqStart + 1;
-    const structLength = structureInfo.totalResidues;
-
-    if (seqLength <= structLength) {
-      const relativeStart = Math.floor((seqStart - 1) / structLength * structureInfo.totalResidues);
-      const relativeEnd = Math.min(relativeStart + seqLength - 1, structureInfo.totalResidues - 1);
-
-      const actualStart = structureInfo.residueList[relativeStart];
-      const actualEnd = structureInfo.residueList[relativeEnd];
-
-      if (actualStart && actualEnd) {
-        debugLog(`Relative mapping ${seqStart}-${seqEnd} to ${actualStart}-${actualEnd}`);
-        return `${actualStart}-${actualEnd}`;
-      }
     }
 
     debugLog(`Could not map sequence range ${seqStart}-${seqEnd} to structure`);
@@ -313,7 +239,7 @@ const ThreeDMolViewer = forwardRef<any, ThreeDMolViewerProps>(({
             // Apply the original domain styling
             applyDomainStyling(viewerRef.current);
 
-            // Focus on the chain if specified
+            // Focus on the protein chain only
             const targetChain = structureInfoRef.current?.actualChain || chainId;
             if (targetChain) {
               viewerRef.current.zoomTo({chain: targetChain});
@@ -340,7 +266,7 @@ const ThreeDMolViewer = forwardRef<any, ThreeDMolViewerProps>(({
         const targetChain = structureInfoRef.current?.actualChain || domain.chainId || chainId || 'A';
 
         try {
-          debugLog(`Highlighting domain: ${domain.id}, range: ${domain.start}-${domain.end}`);
+          debugLog(`Highlighting domain: ${domain.id}, range: ${domain.start}-${domain.end}, chain: ${targetChain}`);
 
           // Get mapped range
           const mappedRange = getMappedRange(domain);
@@ -354,9 +280,8 @@ const ThreeDMolViewer = forwardRef<any, ThreeDMolViewerProps>(({
             resi: mappedRange
           };
 
-          // Set background to low opacity
-          viewerRef.current.setStyle({}, { cartoon: { color: 'lightgray', opacity: 0.3 } });
-          viewerRef.current.setStyle({chain: targetChain}, { cartoon: { color: 'gray', opacity: 0.5 } });
+          // Set background to low opacity (protein chain only)
+          viewerRef.current.setStyle({chain: targetChain}, { cartoon: { color: 'gray', opacity: 0.3 } });
 
           // Highlight the specific domain
           viewerRef.current.setStyle(selection, {
@@ -421,15 +346,18 @@ const ThreeDMolViewer = forwardRef<any, ThreeDMolViewerProps>(({
     }
   };
 
-  // Apply domain styling with improved approach
+  // Apply domain styling with improved approach - PROTEIN CHAIN ONLY
   const applyDomainStyling = (viewer: any) => {
     if (!viewer) return;
 
     const targetChain = structureInfoRef.current?.actualChain || chainId || 'A';
-    debugLog(`Applying styling for ${domains.length} domains on chain ${targetChain}`);
+    debugLog(`Applying styling for ${domains.length} domains on protein chain ${targetChain}`);
 
-    // Step 1: Show the entire structure/chain in gray (unclassified regions)
-    viewer.setStyle({}, { cartoon: { color: 'lightgray', opacity: 0.4 } });
+    // CRITICAL: Hide all non-protein chains and focus on target chain only
+    // Step 1: Hide everything first
+    viewer.setStyle({}, { cartoon: { opacity: 0 }, stick: { opacity: 0 }, sphere: { opacity: 0 } });
+
+    // Step 2: Show only the target protein chain in gray
     viewer.setStyle({chain: targetChain}, {
       cartoon: {
         color: 'gray',
@@ -437,7 +365,7 @@ const ThreeDMolViewer = forwardRef<any, ThreeDMolViewerProps>(({
       }
     });
 
-    // Step 2: Apply domain colors on top of the gray background
+    // Step 3: Apply domain colors on top of the gray background
     if (domains.length > 0) {
       let successfulDomains = 0;
 
@@ -449,7 +377,8 @@ const ThreeDMolViewer = forwardRef<any, ThreeDMolViewerProps>(({
             pdb_range: domain.pdb_range,
             pdb_start: domain.pdb_start,
             pdb_end: domain.pdb_end,
-            color: domain.color
+            color: domain.color,
+            chainId: domain.chainId
           });
 
           // Get the best range to use
@@ -460,7 +389,8 @@ const ThreeDMolViewer = forwardRef<any, ThreeDMolViewerProps>(({
             return;
           }
 
-          const domainChainId = structureInfoRef.current?.actualChain || domain.chainId || targetChain;
+          // Use the domain's chain ID or fall back to target chain
+          const domainChainId = domain.chainId || targetChain;
           const selection = {
             chain: domainChainId,
             resi: mappedRange
@@ -481,9 +411,9 @@ const ThreeDMolViewer = forwardRef<any, ThreeDMolViewerProps>(({
             });
 
             successfulDomains++;
-            debugLog(`✓ Styled domain ${domain.id} with range ${mappedRange}`);
+            debugLog(`✓ Styled domain ${domain.id} with range ${mappedRange} on chain ${domainChainId}`);
           } else {
-            debugLog(`⚠ Domain ${domain.id} range ${mappedRange} not found in structure`);
+            debugLog(`⚠ Domain ${domain.id} range ${mappedRange} not found in chain ${domainChainId}`);
           }
 
         } catch (domainError) {
@@ -494,7 +424,7 @@ const ThreeDMolViewer = forwardRef<any, ThreeDMolViewerProps>(({
       debugLog(`Successfully styled ${successfulDomains}/${domains.length} domains`);
     }
 
-    // Step 3: Force render
+    // Step 4: Force render
     viewer.render();
     lastAppliedDomainsRef.current = [...domains];
   };
@@ -541,7 +471,7 @@ const ThreeDMolViewer = forwardRef<any, ThreeDMolViewerProps>(({
         viewerRef.current = viewer;
 
         // Load structure using mmCIF format
-        debugLog(`Loading PDB ID: ${pdbId} (mmCIF format)`);
+        debugLog(`Loading PDB ID: ${pdbId} (mmCIF format) for chain: ${chainId || 'auto-detect'}`);
 
         // Try the local API first (now serves mmCIF)
         const structureUrl = `/api/pdb/${pdbId}`;
@@ -603,24 +533,24 @@ const ThreeDMolViewer = forwardRef<any, ThreeDMolViewerProps>(({
       }
     };
 
-    // Process loaded structure
+    // Process loaded structure - FOCUS ON PROTEIN CHAIN
     const processLoadedStructure = (viewer: any, mmcifData?: string) => {
       try {
         debugLog('Processing loaded mmCIF structure');
 
-        // Analyze the structure to understand residue numbering and find correct chain
+        // Analyze the structure to understand residue numbering and find correct protein chain
         structureInfoRef.current = analyzeStructure(viewer, chainId, mmcifData);
 
         if (!structureInfoRef.current) {
-          throw new Error('Could not analyze structure - no chains found');
+          throw new Error('Could not analyze structure - no protein chains found');
         }
 
-        // Apply domain styling
+        // Apply domain styling (protein chain only)
         applyDomainStyling(viewer);
 
-        // Focus on the correct chain
+        // Focus on the correct protein chain ONLY
         const targetChain = structureInfoRef.current.actualChain;
-        debugLog(`Focusing on chain: ${targetChain}`);
+        debugLog(`Focusing on protein chain: ${targetChain} (type: ${structureInfoRef.current.chainType})`);
 
         try {
           viewer.zoomTo({chain: targetChain});
@@ -662,7 +592,7 @@ const ThreeDMolViewer = forwardRef<any, ThreeDMolViewerProps>(({
         }
       }
     };
-  }, [pdbId, backgroundColor]);
+  }, [pdbId, backgroundColor, chainId]);
 
   // Update domain styling when domains or chainId change
   useEffect(() => {
@@ -725,6 +655,7 @@ const ThreeDMolViewer = forwardRef<any, ThreeDMolViewerProps>(({
               animation: 'spin 1s linear infinite'
             }} />
             <div>Loading structure...</div>
+            {chainId && <div style={{ fontSize: '12px', color: '#666' }}>Chain {chainId}</div>}
 
             <style jsx>{`
               @keyframes spin {
@@ -756,6 +687,11 @@ const ThreeDMolViewer = forwardRef<any, ThreeDMolViewerProps>(({
           }}>
             <div style={{ fontWeight: 'bold', marginBottom: '10px' }}>Error</div>
             <div>{errorMessage}</div>
+            {chainId && (
+              <div style={{ fontSize: '12px', marginTop: '10px', color: '#666' }}>
+                Target chain: {chainId}
+              </div>
+            )}
           </div>
         </div>
       )}
