@@ -1,4 +1,4 @@
-// app/api/search/route.ts
+// app/api/search/route.ts - FIXED VERSION
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 
@@ -28,7 +28,7 @@ export async function GET(request: Request) {
       );
     }
 
-    let searchQuery, totalCountQuery, queryParams;
+    let searchQuery, totalCountQuery, searchParams_arr, countParams_arr;
     let clusterQuery, clusterParams;
 
     if (q) {
@@ -123,6 +123,7 @@ export async function GET(request: Request) {
         LIMIT $3 OFFSET $4
       `;
 
+      // FIXED: Count query uses only the search pattern parameter
       totalCountQuery = `
         SELECT
           (SELECT COUNT(*) FROM public.view_dom_clsrel_pdbinfo
@@ -132,7 +133,9 @@ export async function GET(request: Request) {
         AS total
       `;
 
-      queryParams = [exactMatch, searchPattern, limit, offset];
+      // FIXED: Separate parameter arrays for search and count queries
+      searchParams_arr = [exactMatch, searchPattern, limit, offset];
+      countParams_arr = [searchPattern]; // Only search pattern for count
 
       // Cluster search for keyword queries
       clusterQuery = `
@@ -204,7 +207,8 @@ export async function GET(request: Request) {
         WHERE LOWER(pdb_id) = LOWER($1)
       `;
 
-      queryParams = [normalizedPdbId, limit, offset];
+      searchParams_arr = [normalizedPdbId, limit, offset];
+      countParams_arr = [normalizedPdbId]; // FIXED: Only PDB ID for count
 
       // Cluster search for PDB queries
       clusterQuery = `
@@ -297,7 +301,8 @@ export async function GET(request: Request) {
         AS total
       `;
 
-      queryParams = [unpAcc, limit, offset];
+      searchParams_arr = [unpAcc, limit, offset];
+      countParams_arr = [unpAcc]; // FIXED: Only UniProt ACC for count
 
       // Cluster search for UniProt queries
       clusterQuery = `
@@ -348,13 +353,14 @@ export async function GET(request: Request) {
       clusterParams = [unpAcc];
     }
 
-    console.log('Executing search query:', searchQuery);
-    console.log('Query params:', queryParams);
+    console.log('Executing search query:', searchQuery?.substring(0, 100) + '...');
+    console.log('Search params:', searchParams_arr);
+    console.log('Count params:', countParams_arr);
 
-    // Execute search and get total count in parallel
+    // FIXED: Execute search and get total count with correct parameters
     const [searchResult, countResult, clusterResult] = await Promise.all([
-      query(searchQuery!, queryParams!),
-      query(totalCountQuery!, queryParams!.slice(0, -2)), // Remove limit and offset for count
+      query(searchQuery!, searchParams_arr!),
+      query(totalCountQuery!, countParams_arr!), // FIXED: Use separate count parameters
       clusterQuery ? query(clusterQuery, clusterParams!) : Promise.resolve({ rows: [] })
     ]);
 
