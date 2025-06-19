@@ -150,21 +150,22 @@ export async function GET(request: Request) {
             WHEN LOWER(name) = LOWER($1) THEN 85
             WHEN LOWER(name) LIKE LOWER($2) THEN 80
             ELSE 50
-          END) as relevance_score
-        FROM
-          public.cluster
-        WHERE
-          LOWER(name) ILIKE LOWER($2) OR LOWER(id) ILIKE LOWER($2)
-        ORDER BY
-          relevance_score DESC,
-          CASE type
+          END) as relevance_score,
+          (CASE type
             WHEN 'A' THEN 1
             WHEN 'X' THEN 2
             WHEN 'H' THEN 3
             WHEN 'T' THEN 4
             WHEN 'F' THEN 5
             ELSE 6
-          END,
+          END) as type_order
+        FROM
+          public.cluster
+        WHERE
+          LOWER(name) ILIKE LOWER($2) OR LOWER(id) ILIKE LOWER($2)
+        ORDER BY
+          relevance_score DESC,
+          type_order,
           id
         LIMIT 20
       `;
@@ -217,7 +218,15 @@ export async function GET(request: Request) {
           SUBSTRING(c.id, 1, 1) AS label,
           c.name,
           c.type,
-          100 as relevance_score
+          100 as relevance_score,
+          (CASE c.type
+            WHEN 'A' THEN 1
+            WHEN 'X' THEN 2
+            WHEN 'H' THEN 3
+            WHEN 'T' THEN 4
+            WHEN 'F' THEN 5
+            ELSE 6
+          END) as type_order
         FROM
           public.cluster c
         JOIN
@@ -227,14 +236,7 @@ export async function GET(request: Request) {
         WHERE
           LOWER(v.pdb_id) = LOWER($1)
         ORDER BY
-          CASE c.type
-            WHEN 'A' THEN 1
-            WHEN 'X' THEN 2
-            WHEN 'H' THEN 3
-            WHEN 'T' THEN 4
-            WHEN 'F' THEN 5
-            ELSE 6
-          END,
+          type_order,
           c.id
         LIMIT 20
       `;
@@ -311,7 +313,15 @@ export async function GET(request: Request) {
           SUBSTRING(c.id, 1, 1) AS label,
           c.name,
           c.type,
-          100 as relevance_score
+          100 as relevance_score,
+          (CASE c.type
+            WHEN 'A' THEN 1
+            WHEN 'X' THEN 2
+            WHEN 'H' THEN 3
+            WHEN 'T' THEN 4
+            WHEN 'F' THEN 5
+            ELSE 6
+          END) as type_order
         FROM
           public.cluster c
         JOIN
@@ -328,7 +338,15 @@ export async function GET(request: Request) {
           SUBSTRING(c.id, 1, 1) AS label,
           c.name,
           c.type,
-          100 as relevance_score
+          100 as relevance_score,
+          (CASE c.type
+            WHEN 'A' THEN 1
+            WHEN 'X' THEN 2
+            WHEN 'H' THEN 3
+            WHEN 'T' THEN 4
+            WHEN 'F' THEN 5
+            ELSE 6
+          END) as type_order
         FROM
           public.cluster c
         JOIN
@@ -339,14 +357,7 @@ export async function GET(request: Request) {
           v.unp_acc = $1)
 
         ORDER BY
-          CASE type
-            WHEN 'A' THEN 1
-            WHEN 'X' THEN 2
-            WHEN 'H' THEN 3
-            WHEN 'T' THEN 4
-            WHEN 'F' THEN 5
-            ELSE 6
-          END,
+          type_order,
           id
         LIMIT 20
       `;
@@ -391,6 +402,7 @@ export async function GET(request: Request) {
         name: cluster.name || '',
         type: cluster.type || '',
         relevanceScore: cluster.relevance_score
+        // Note: type_order is used for sorting but not exposed in the API response
       })),
       totalResults: totalCount,
       pagination: {
