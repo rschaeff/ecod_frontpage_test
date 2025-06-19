@@ -14,6 +14,8 @@ import LoadingState from '@/components/ui/LoadingState';
 // Import context hooks
 import { useSearch } from '@/contexts/SearchContext';
 import { useUserPreferences } from '@/contexts/UserPreferencesContext';
+import SearchResults from '@/components/SearchResults';
+
 
 // Type for the structure files uploaded by users
 interface UploadedFile extends File {
@@ -57,6 +59,12 @@ export default function ECODHomePage() {
   const [status, setStatus] = useState<StatusData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [blastSequence, setBlastSequence] = useState<string>('');
+  const [blastLoading, setBlastLoading] = useState<boolean>(false);
+  const [blastResults, setBlastResults] = useState<any>(null);
+  const [blastError, setBlastError] = useState<string | null>(null);
+
 
 // Inside your ECODHomePage component
 
@@ -120,18 +128,71 @@ useEffect(() => {
   };
 
   // Handle search dialog submission
-  const handleSearchSubmit = () => {
-    if (searchType === 'upload') {
-      if (uploadedFile) {
-        // In a real app, we'd handle file upload with a form submission
-        alert(`File "${uploadedFile.name}" would be uploaded and processed for structure search.`);
+    const handleSearchSubmit = async () => {
+      if (searchType === 'upload') {
+        if (uploadedFile) {
+          alert(`File upload for structure search is not yet implemented. File "${uploadedFile.name}" would be uploaded and processed.`);
+        }
+      } else if (structureId.trim()) {
+        try {
+          // Close the dialog first
+          setSearchDialogOpen(false);
+
+          // Use the search context to perform the search
+          if (searchType === 'pdb') {
+            await performSearch(structureId.trim());
+          } else {
+            await performSearch(structureId.trim());
+          }
+
+          // Clear the input
+          setStructureId('');
+
+        } catch (error) {
+          console.error('Structure search error:', error);
+          alert('Search failed. Please check your input and try again.');
+        }
       }
-    } else if (structureId.trim()) {
-      // Redirect to search results
-      const param = searchType === 'pdb' ? 'pdb' : 'unp_acc';
-      window.location.href = `/search?${param}=${structureId.trim()}`;
-    }
-  };
+    };
+
+    const handleBlastSearch = async () => {
+      if (!blastSequence.trim()) {
+        alert('Please enter a protein sequence to search.');
+        return;
+      }
+
+      setBlastLoading(true);
+      setBlastError(null);
+      setBlastResults(null);
+
+      try {
+        console.log('Submitting BLAST search...');
+
+        const formData = new FormData();
+        formData.append('sequence', blastSequence.trim());
+
+        const response = await fetch('/api/search/blast', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `BLAST search failed: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log('BLAST results:', data);
+
+        setBlastResults(data);
+
+      } catch (error) {
+        console.error('BLAST search error:', error);
+        setBlastError(error instanceof Error ? error.message : 'BLAST search failed');
+      } finally {
+        setBlastLoading(false);
+      }
+    };
 
   // Example searches for the search form
   const exampleSearches = [
@@ -489,7 +550,7 @@ useEffect(() => {
           <h2 className="text-2xl font-bold text-center mb-8">Advanced Search Options</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* Search by Sequence (BLAST) */}
+            {/* Search by Sequence (BLAST) - Updated */}
             <div className="bg-white rounded-lg shadow-md overflow-hidden">
               <div className="p-6">
                 <div className="flex items-center justify-center w-12 h-12 bg-blue-100 text-blue-600 rounded-full mb-4">
@@ -501,17 +562,57 @@ useEffect(() => {
                 <p className="text-gray-600 mb-4">
                   Identify domains in your protein sequence by running a BLAST search against the ECOD database.
                 </p>
+
+                {/* Show error if any */}
+                {blastError && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-md mb-4">
+                    <p className="text-sm">{blastError}</p>
+                  </div>
+                )}
+
+                {/* Show results if any */}
+                {blastResults && (
+                  <div className="bg-green-50 border border-green-200 text-green-700 p-3 rounded-md mb-4">
+                    <p className="text-sm font-medium">
+                      BLAST search completed! Found {blastResults.hits?.length || 0} hits.
+                    </p>
+                    {blastResults.hits?.length > 0 && (
+                      <div className="mt-2 text-xs space-y-1">
+                        <p>Top hit: {blastResults.hits[0].domain_id} (E-value: {blastResults.hits[0].e_value})</p>
+                        <p>Classification: {blastResults.hits[0].classification?.fgroup?.name}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="bg-gray-50 p-4 rounded-md mb-4">
-                  <label htmlFor="blastSequence" className="block text-sm font-medium text-gray-700 mb-2">Enter protein sequence:</label>
+                  <label htmlFor="blastSequence" className="block text-sm font-medium text-gray-700 mb-2">
+                    Enter protein sequence:
+                  </label>
                   <textarea
                     id="blastSequence"
                     rows={6}
                     className="w-full border border-gray-300 rounded-md p-3 text-sm focus:ring-blue-500 focus:border-blue-500"
                     placeholder=">Your_Sequence_ID&#10;MVLSEGEWQLVLHVWAKVEADVAGHGQDILIRLFKSHPETLEKFDRFKHLKTEAEMKASEDLKKHGVTVLTALGAILKKKGHHEAELKPLAQSHATKHKIPIKYLEFISEAIIHVLHSRHPGNFGADAQGAMNKALELFRKDIAAKYKELGYQG"
-                  ></textarea>
+                    value={blastSequence}
+                    onChange={(e) => setBlastSequence(e.target.value)}
+                    disabled={blastLoading}
+                  />
                 </div>
-                <button className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-md transition duration-200 ease-in-out w-full">
-                  Submit BLAST Search
+
+                <button
+                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-2 px-6 rounded-md transition duration-200 ease-in-out w-full flex items-center justify-center"
+                  onClick={handleBlastSearch}
+                  disabled={blastLoading || !blastSequence.trim()}
+                >
+                  {blastLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Running BLAST Search...
+                    </>
+                  ) : (
+                    'Submit BLAST Search'
+                  )}
                 </button>
               </div>
             </div>
