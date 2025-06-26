@@ -5,22 +5,23 @@ import Link from 'next/link';
 import { Database, Search, Home, Download, HelpCircle, ExternalLink, Menu, X, ChevronRight, ChevronDown, File, BookOpen, FileText, Code, Github } from 'lucide-react';
 
 export default function DocumentationPage() {
+  type SectionKey = 'overview' | 'classification' | 'access' | 'api' | 'faq' | 'citation';
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [expandedSections, setExpandedSections] = useState({
-    overview: true,
-    classification: false,
-    access: false,
-    api: false,
-    faq: false,
-    citation: false
-  });
+    const [expandedSections, setExpandedSections] = useState<Record<SectionKey, boolean>>({
+      overview: true,
+      classification: false,
+      access: false,
+      api: false,
+      faq: false,
+      citation: false
+    });
 
-  const toggleSection = (section: string) => {
-    setExpandedSections(prev => ({
-      ...prev,
-      [section]: !prev[section]
-    }));
-  };
+    const toggleSection = (section: SectionKey) => {
+      setExpandedSections(prev => ({
+        ...prev,
+        [section]: !prev[section]
+      }));
+    };
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
