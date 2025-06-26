@@ -1,5 +1,5 @@
 // app/domain/[id]/page.tsx - Fixed version
-import DomainDetail from '@/components/DomainDetail';
+import DomainDetail from '@/components/domain/DomainDetail';
 
 interface DomainPageParams {
   params: {
