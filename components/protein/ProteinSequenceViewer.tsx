@@ -2,11 +2,11 @@
 
 import { useRef } from 'react';
 import { Download, Eye, Info } from 'lucide-react';
-import { ProteinData } from '@/types/protein';
+import { ProteinChain } from '@/types/protein';
 import SequenceViewer from '@/components/SequenceViewer';
 
 interface EnhancedSequenceViewerProps {
-  protein: ProteinData;
+  protein: ProteinChain;
   highlightedDomain: string | null;
   onPositionSelect?: (position: number) => void;
 }

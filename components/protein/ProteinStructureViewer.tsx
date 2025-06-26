@@ -9,7 +9,7 @@ import {
   Settings, Eye, EyeOff, Info, AlertTriangle, RefreshCw,
   ChevronDown, ChevronUp
 } from 'lucide-react';
-import { ProteinData, ViewerOptions, ThreeDMolDomain, convertDomainFormat } from '@/types/protein';
+import { ProteinChain, ViewerOptions, ThreeDMolDomain, convertDomainFormat } from '@/types/protein';
 
 // Dynamic import for 3DMol viewer to avoid SSR issues
 const ThreeDMolViewer = dynamic(
@@ -28,7 +28,7 @@ const ThreeDMolViewer = dynamic(
 );
 
 interface ProteinStructureViewerProps {
-  protein: ProteinData;
+  protein: ProteinChain;
   highlightedDomain?: string | null;
   viewerOptions?: ViewerOptions;
   onViewerOptionsChange?: (options: ViewerOptions) => void;

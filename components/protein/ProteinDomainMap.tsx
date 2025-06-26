@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { ProteinChain } from '@/types/protein';
 
 interface ProteinDomainMapProps {
-  protein: ProteinData;
+  protein: ProteinChain;
   highlightedDomain: string | null;
   onDomainHover: (domainId: string | null) => void;
 }
