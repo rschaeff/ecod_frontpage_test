@@ -7,13 +7,13 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { convertDomainFormat, ThreeDMolDomain } from '@/types/protein';
+import { convertDomainFormat, ThreeDMolDomain, ProteinDomain } from '@/types/protein';
 
 // Dynamic import for 3DMol viewer
 const ThreeDMolViewer = dynamic(
   () => import('@/components/visualization/ThreeDMolViewer'),
-  { 
-    ssr: false, 
+  {
+    ssr: false,
     loading: () => (
       <div className="h-96 bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -86,7 +86,7 @@ interface DomainData {
   description: string;    // Human-readable description
   classification: DomainClassification;
   protein: Protein;       // Parent protein info
-  representativeFor: string; // F-group or null if not representative
+  representativeFor: string; // F-group or empty string if not representative
   similar: SimilarDomain[];  // Similar domains
   pfam: PfamMapping[];    // Pfam mappings
   ligands: Ligand[];      // Bound ligands
@@ -127,7 +127,7 @@ const AppLayout: React.FC<{
               <h1 className="text-2xl font-bold">ECOD</h1>
               <p className="hidden md:block ml-2 text-sm">Evolutionary Classification of Protein Domains</p>
             </div>
-            
+
             {/* Desktop navigation */}
             <nav className="hidden md:flex space-x-6">
               <Link href="/" className="flex items-center hover:text-blue-200">
@@ -147,16 +147,16 @@ const AppLayout: React.FC<{
                 Lab Homepage
               </a>
             </nav>
-            
+
             {/* Mobile menu button */}
-            <button 
+            <button
               className="md:hidden rounded-md p-2 hover:bg-blue-600 focus:outline-none"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             >
               {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
             </button>
           </div>
-          
+
           {/* Mobile navigation */}
           {mobileMenuOpen && (
             <nav className="md:hidden mt-4 pb-2 space-y-3">
@@ -227,9 +227,9 @@ const AppLayout: React.FC<{
   );
 };
 
-const LoadingState: React.FC<{ message: string; size?: 'small' | 'medium' | 'large' }> = ({ 
-  message, 
-  size = 'medium' 
+const LoadingState: React.FC<{ message: string; size?: 'small' | 'medium' | 'large' }> = ({
+  message,
+  size = 'medium'
 }) => {
   const sizeClasses = {
     small: 'h-6 w-6',
@@ -247,10 +247,10 @@ const LoadingState: React.FC<{ message: string; size?: 'small' | 'medium' | 'lar
   );
 };
 
-const ErrorState: React.FC<{ 
-  title: string; 
-  message: string; 
-  actions?: React.ReactNode 
+const ErrorState: React.FC<{
+  title: string;
+  message: string;
+  actions?: React.ReactNode
 }> = ({ title, message, actions }) => (
   <div className="flex items-center justify-center p-8">
     <div className="max-w-md w-full bg-white rounded-lg shadow-md p-6">
@@ -325,19 +325,19 @@ export default function DomainDetail({ params }: DomainPageParams) {
         classification: {
           architecture: "Alpha proteins",
           xgroup: {
-            id: "X.1.1",
+            id: "1.1",  // Fixed: removed X. prefix
             name: "TBP-like"
           },
           hgroup: {
-            id: "H.1.1.1",
+            id: "1.1.1",  // Fixed: removed H. prefix
             name: "TATA-binding protein-like"
           },
           tgroup: {
-            id: "T.1.1.1.1",
+            id: "1.1.1.1",  // Fixed: removed T. prefix
             name: "TATA-binding protein"
           },
           fgroup: {
-            id: "F.1.1.1.1.1",
+            id: "1.1.1.1.1",  // Fixed: removed F. prefix
             name: "TATA-box binding protein family"
           }
         },
@@ -450,27 +450,33 @@ export default function DomainDetail({ params }: DomainPageParams) {
     ];
   };
 
-  // Convert domain to 3DMol format
+  // Convert domain to 3DMol format - FIXED VERSION
   const getDomainFor3DMol = (): ThreeDMolDomain[] => {
     if (!domain) return [];
 
-    // Create a pseudo ProteinDomain to convert
-    const pseudoDomain = {
+    // Define the colors array that was missing
+    const colors = ['#4285F4', '#EA4335', '#FBBC05', '#34A853', '#9C27B0', '#FF9800'];
+
+    // Create a properly typed ProteinDomain object
+    const pseudoDomain: ProteinDomain = {
       id: domain.id,
       range: domain.range,
-      rangeStart: domain.rangeStart,
-      rangeEnd: domain.rangeEnd,
+      rangeStart: parseInt(domain.range.split('-')[0]) || 0,
+      rangeEnd: parseInt(domain.range.split('-')[1]) || 0,
+      chainId: domain.chainId || 'A',
       ecod: {
+        architecture: domain.classification.architecture || "Unknown",
         xgroup: domain.classification.xgroup.id,
         hgroup: domain.classification.hgroup.id,
         tgroup: domain.classification.tgroup.id,
         fgroup: domain.classification.fgroup.id
       },
-      color: '#FF5722', // Orange color for the domain
-      description: domain.description
+      color: colors[0],
+      description: domain.description || 'Domain'
     };
 
-    return [convertDomainFormat(pseudoDomain, domain.chainId)];
+    // Return the converted domain array
+    return [convertDomainFormat(pseudoDomain)];
   };
 
   // If loading, show loading state
@@ -594,10 +600,10 @@ export default function DomainDetail({ params }: DomainPageParams) {
                 <div className="space-y-3">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Style</label>
-                    <select 
+                    <select
                       className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
                       value={viewerOptions.style}
-                      onChange={(e) => updateViewerOptions({ style: e.target.value as any })}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => updateViewerOptions({ style: e.target.value as any })}
                     >
                       <option value="cartoon">Cartoon</option>
                       <option value="ball-and-stick">Ball and Stick</option>
@@ -605,29 +611,29 @@ export default function DomainDetail({ params }: DomainPageParams) {
                       <option value="spacefill">Space Fill</option>
                     </select>
                   </div>
-                  
+
                   <div className="flex items-center">
                     <input
                       type="checkbox"
                       id="showSideChains"
                       checked={viewerOptions.showSideChains}
-                      onChange={(e) => updateViewerOptions({ showSideChains: e.target.checked })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateViewerOptions({ showSideChains: e.target.checked })}
                       className="mr-2"
                     />
                     <label htmlFor="showSideChains" className="text-sm text-gray-700">Show Side Chains</label>
                   </div>
-                  
+
                   <div className="flex items-center">
                     <input
                       type="checkbox"
                       id="showLigands"
                       checked={viewerOptions.showLigands}
-                      onChange={(e) => updateViewerOptions({ showLigands: e.target.checked })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateViewerOptions({ showLigands: e.target.checked })}
                       className="mr-2"
                     />
                     <label htmlFor="showLigands" className="text-sm text-gray-700">Show Ligands</label>
                   </div>
-                  
+
                   <button
                     onClick={resetViewerOptions}
                     className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded text-sm transition-colors"
@@ -650,7 +656,7 @@ export default function DomainDetail({ params }: DomainPageParams) {
                       <div className="text-xs text-gray-500">Architecture</div>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center">
                     <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center font-bold mr-2 text-sm">
                       X
@@ -663,7 +669,7 @@ export default function DomainDetail({ params }: DomainPageParams) {
                     </div>
                     <div className="text-xs text-gray-500">{domain.classification.xgroup.id}</div>
                   </div>
-                  
+
                   <div className="flex items-center">
                     <div className="w-6 h-6 rounded-full bg-green-100 text-green-800 flex items-center justify-center font-bold mr-2 text-sm">
                       H
@@ -676,7 +682,7 @@ export default function DomainDetail({ params }: DomainPageParams) {
                     </div>
                     <div className="text-xs text-gray-500">{domain.classification.hgroup.id}</div>
                   </div>
-                  
+
                   <div className="flex items-center">
                     <div className="w-6 h-6 rounded-full bg-yellow-100 text-yellow-800 flex items-center justify-center font-bold mr-2 text-sm">
                       T
@@ -689,7 +695,7 @@ export default function DomainDetail({ params }: DomainPageParams) {
                     </div>
                     <div className="text-xs text-gray-500">{domain.classification.tgroup.id}</div>
                   </div>
-                  
+
                   <div className="flex items-center">
                     <div className="w-6 h-6 rounded-full bg-purple-100 text-purple-800 flex items-center justify-center font-bold mr-2 text-sm">
                       F
@@ -868,7 +874,7 @@ export default function DomainDetail({ params }: DomainPageParams) {
                     {Array.from({ length: Math.ceil(domain.sequence.length / 50) }).map((_, lineIndex) => {
                       const lineStart = lineIndex * 50;
                       const lineChars = domain.sequence.slice(lineStart, lineStart + 50);
-                      
+
                       return (
                         <div key={lineIndex} className="flex">
                           <div className="w-12 text-right pr-2 font-medium text-gray-500">
@@ -878,9 +884,9 @@ export default function DomainDetail({ params }: DomainPageParams) {
                             {Array.from(lineChars).map((char, i) => {
                               const position = domain.rangeStart + lineStart + i;
                               const isHighlighted = highlightedPosition === position;
-                              
+
                               return (
-                                <span 
+                                <span
                                   key={i}
                                   className={`cursor-pointer ${isHighlighted ? 'bg-blue-200' : 'hover:bg-gray-200'}`}
                                   onClick={() => handleSequencePositionSelect(position)}
@@ -923,7 +929,7 @@ export default function DomainDetail({ params }: DomainPageParams) {
 
                 <div className="space-y-2">
                   {domain.similar.map(similar => (
-                    <div 
+                    <div
                       key={similar.id}
                       className="border rounded-md p-3 hover:border-gray-300 transition-all"
                     >
@@ -945,7 +951,7 @@ export default function DomainDetail({ params }: DomainPageParams) {
                             ></div>
                           </div>
                         </div>
-                        <Link 
+                        <Link
                           href={`/domain/${similar.id}`}
                           className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-sm hover:bg-blue-100"
                         >
