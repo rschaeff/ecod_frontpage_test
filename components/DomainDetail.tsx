@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { convertDomainFormat, ThreeDMolDomain } from '@/types/protein';
+import { convertDomainFormat, ThreeDMolDomain, ProteinDomain } from '@/types/protein';
 
 // Dynamic import for 3DMol viewer
 const ThreeDMolViewer = dynamic(
@@ -86,7 +86,7 @@ interface DomainData {
   description: string;    // Human-readable description
   classification: DomainClassification;
   protein: Protein;       // Parent protein info
-  representativeFor: string; // F-group or null if not representative
+  representativeFor: string; // F-group or empty string if not representative
   similar: SimilarDomain[];  // Similar domains
   pfam: PfamMapping[];    // Pfam mappings
   ligands: Ligand[];      // Bound ligands
@@ -325,19 +325,19 @@ export default function DomainDetail({ params }: DomainPageParams) {
         classification: {
           architecture: "Alpha proteins",
           xgroup: {
-            id: "X.1.1",
+            id: "1.1",  // Fixed: removed X. prefix
             name: "TBP-like"
           },
           hgroup: {
-            id: "H.1.1.1",
+            id: "1.1.1",  // Fixed: removed H. prefix
             name: "TATA-binding protein-like"
           },
           tgroup: {
-            id: "T.1.1.1.1",
+            id: "1.1.1.1",  // Fixed: removed T. prefix
             name: "TATA-binding protein"
           },
           fgroup: {
-            id: "F.1.1.1.1.1",
+            id: "1.1.1.1.1",  // Fixed: removed F. prefix
             name: "TATA-box binding protein family"
           }
         },
@@ -350,7 +350,7 @@ export default function DomainDetail({ params }: DomainPageParams) {
           resolution: "2.1Å",
           method: "X-ray diffraction"
         },
-        representativeFor: domainNum === 1 ? "F.1.1.1.1.1" : "",
+        representativeFor: domainNum === 1 ? "1.1.1.1.1" : "",  // Fixed: use empty string instead of null
         similar: [
           {
             id: domainNum === 1 ? "e1cdcA1" : "e1cdcA2",
@@ -450,27 +450,34 @@ export default function DomainDetail({ params }: DomainPageParams) {
     ];
   };
 
-  // Convert domain to 3DMol format
+  // Convert domain to 3DMol format - FIXED VERSION
   const getDomainFor3DMol = (): ThreeDMolDomain[] => {
     if (!domain) return [];
 
-    // Create a pseudo ProteinDomain to convert
+    // Define the colors array that was missing
+    const colors = ['#4285F4', '#EA4335', '#FBBC05', '#34A853', '#9C27B0', '#FF9800'];
+
+    // Create a properly typed ProteinDomain object
     const pseudoDomain: ProteinDomain = {
       id: domain.id,
       range: domain.range,
       rangeStart: parseInt(domain.range.split('-')[0]) || 0,
       rangeEnd: parseInt(domain.range.split('-')[1]) || 0,
-      chainId: domain.chainId || 'A', // Add the missing chainId property
+      chainId: domain.chainId || 'A',
       ecod: {
-        architecture: "Unknown", // Add the missing architecture property
-        xgroup: domain.ecod.xgroup,
-        hgroup: domain.ecod.hgroup,
-        tgroup: domain.ecod.tgroup,
-        fgroup: domain.ecod.fgroup
+        architecture: domain.classification.architecture || "Unknown",
+        xgroup: domain.classification.xgroup.id,
+        hgroup: domain.classification.hgroup.id,
+        tgroup: domain.classification.tgroup.id,
+        fgroup: domain.classification.fgroup.id
       },
       color: colors[0],
-      description: domain.description || domain.name || 'Domain'
+      description: domain.description || 'Domain'
     };
+
+    // Return the converted domain array
+    return [convertDomainFormat(pseudoDomain)];
+  };
 
   // If loading, show loading state
   if (loading) {
@@ -596,7 +603,7 @@ export default function DomainDetail({ params }: DomainPageParams) {
                     <select
                       className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
                       value={viewerOptions.style}
-                      onChange={(e) => updateViewerOptions({ style: e.target.value as any })}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => updateViewerOptions({ style: e.target.value as any })}
                     >
                       <option value="cartoon">Cartoon</option>
                       <option value="ball-and-stick">Ball and Stick</option>
@@ -610,7 +617,7 @@ export default function DomainDetail({ params }: DomainPageParams) {
                       type="checkbox"
                       id="showSideChains"
                       checked={viewerOptions.showSideChains}
-                      onChange={(e) => updateViewerOptions({ showSideChains: e.target.checked })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateViewerOptions({ showSideChains: e.target.checked })}
                       className="mr-2"
                     />
                     <label htmlFor="showSideChains" className="text-sm text-gray-700">Show Side Chains</label>
@@ -621,7 +628,7 @@ export default function DomainDetail({ params }: DomainPageParams) {
                       type="checkbox"
                       id="showLigands"
                       checked={viewerOptions.showLigands}
-                      onChange={(e) => updateViewerOptions({ showLigands: e.target.checked })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateViewerOptions({ showLigands: e.target.checked })}
                       className="mr-2"
                     />
                     <label htmlFor="showLigands" className="text-sm text-gray-700">Show Ligands</label>
