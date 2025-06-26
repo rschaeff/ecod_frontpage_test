@@ -3,19 +3,8 @@
 
 import React from 'react';
 import { RotateCw, Eye, EyeOff, Settings } from 'lucide-react';
+import { ViewerOptions } from '@/types/protein'; // IMPORT from canonical location
 
-// Define ViewerOptions interface
-export interface ViewerOptions {
-  style: 'cartoon' | 'ball-and-stick' | 'surface' | 'spacefill' | 'stick' | 'sphere' | 'line';
-  colorScheme?: 'chain' | 'secondary-structure' | 'residue-type' | 'hydrophobicity' | 'element';
-  showSideChains: boolean;
-  showLigands: boolean;
-  showWater?: boolean;
-  showLabels?: boolean;
-  quality?: 'low' | 'medium' | 'high';
-  zoom?: number;
-  backgroundColor?: string;
-}
 
 interface ControlPanelProps {
   options: ViewerOptions;
@@ -61,35 +50,11 @@ export default function ControlPanel({
           disabled={disabled}
         >
           <option value="cartoon">Cartoon</option>
-          <option value="stick">Stick</option>
           <option value="ball-and-stick">Ball & Stick</option>
           <option value="surface">Surface</option>
           <option value="spacefill">Space Fill</option>
-          <option value="sphere">Sphere</option>
-          <option value="line">Line</option>
         </select>
       </div>
-
-      {/* Color Scheme */}
-      {options.colorScheme !== undefined && (
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Color Scheme
-          </label>
-          <select
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-            value={options.colorScheme || 'chain'}
-            onChange={e => onChange({ colorScheme: e.target.value as ViewerOptions['colorScheme'] })}
-            disabled={disabled}
-          >
-            <option value="chain">By Chain</option>
-            <option value="secondary-structure">Secondary Structure</option>
-            <option value="residue-type">Residue Type</option>
-            <option value="hydrophobicity">Hydrophobicity</option>
-            <option value="element">By Element</option>
-          </select>
-        </div>
-      )}
 
       {/* Display Options */}
       <div className="space-y-3">
@@ -133,29 +98,8 @@ export default function ControlPanel({
           </div>
         </label>
 
-        {/* Show Water (if option exists) */}
-        {options.showWater !== undefined && (
-          <label className="flex items-center space-x-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={options.showWater || false}
-              onChange={e => onChange({ showWater: e.target.checked })}
-              disabled={disabled}
-              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-50"
-            />
-            <div className="flex items-center">
-              {options.showWater ? (
-                <Eye className="h-4 w-4 text-green-600 mr-1" />
-              ) : (
-                <EyeOff className="h-4 w-4 text-gray-400 mr-1" />
-              )}
-              <span className="text-sm text-gray-700">Show Water</span>
-            </div>
-          </label>
-        )}
-
-        {/* Show Labels (if option exists) */}
-        {options.showLabels !== undefined && (
+        {/* Show Labels (if property exists) */}
+        {'showLabels' in options && (
           <label className="flex items-center space-x-2 cursor-pointer">
             <input
               type="checkbox"
@@ -174,76 +118,26 @@ export default function ControlPanel({
             </div>
           </label>
         )}
+
+        {/* Zoom Control (if property exists) */}
+        {'zoom' in options && (
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Zoom Level: {Math.round((options.zoom || 1) * 100)}%
+            </label>
+            <input
+              type="range"
+              min="0.1"
+              max="3"
+              step="0.1"
+              value={options.zoom || 1}
+              onChange={e => onChange({ zoom: parseFloat(e.target.value) })}
+              disabled={disabled}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer disabled:opacity-50"
+            />
+          </div>
+        )}
       </div>
-
-      {/* Quality Settings (if option exists) */}
-      {options.quality !== undefined && (
-        <div className="mt-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Rendering Quality
-          </label>
-          <select
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-            value={options.quality || 'medium'}
-            onChange={e => onChange({ quality: e.target.value as ViewerOptions['quality'] })}
-            disabled={disabled}
-          >
-            <option value="low">Low (Fast)</option>
-            <option value="medium">Medium</option>
-            <option value="high">High (Slow)</option>
-          </select>
-        </div>
-      )}
-
-      {/* Zoom Control (if option exists) */}
-      {options.zoom !== undefined && (
-        <div className="mt-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Zoom Level: {Math.round((options.zoom || 1) * 100)}%
-          </label>
-          <input
-            type="range"
-            min="0.1"
-            max="3"
-            step="0.1"
-            value={options.zoom || 1}
-            onChange={e => onChange({ zoom: parseFloat(e.target.value) })}
-            disabled={disabled}
-            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer disabled:opacity-50"
-          />
-          <div className="flex justify-between text-xs text-gray-500 mt-1">
-            <span>10%</span>
-            <span>100%</span>
-            <span>300%</span>
-          </div>
-        </div>
-      )}
-
-      {/* Background Color (if option exists) */}
-      {options.backgroundColor !== undefined && (
-        <div className="mt-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Background Color
-          </label>
-          <div className="flex items-center space-x-2">
-            <input
-              type="color"
-              value={options.backgroundColor || '#ffffff'}
-              onChange={e => onChange({ backgroundColor: e.target.value })}
-              disabled={disabled}
-              className="w-8 h-8 border border-gray-300 rounded cursor-pointer disabled:opacity-50"
-            />
-            <input
-              type="text"
-              value={options.backgroundColor || '#ffffff'}
-              onChange={e => onChange({ backgroundColor: e.target.value })}
-              disabled={disabled}
-              className="flex-1 border border-gray-300 rounded-md px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-              placeholder="#ffffff"
-            />
-          </div>
-        </div>
-      )}
 
       {/* Reset Button */}
       <div className="mt-6 pt-4 border-t border-gray-200">
