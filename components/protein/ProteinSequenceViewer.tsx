@@ -1,3 +1,6 @@
+// Fix for ProteinSequenceViewer.tsx
+// Update the interface and callback handling
+
 'use client';
 
 import { useRef } from 'react';
@@ -8,7 +11,7 @@ import SequenceViewer from '@/components/SequenceViewer';
 interface EnhancedSequenceViewerProps {
   protein: ProteinChain;
   highlightedDomain: string | null;
-  onPositionSelect?: (position: number) => void;
+  onPositionSelect?: (position: number | null) => void;  // FIXED: Allow null
 }
 
 export default function EnhancedProteinSequenceViewer({
