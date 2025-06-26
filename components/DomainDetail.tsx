@@ -455,23 +455,22 @@ export default function DomainDetail({ params }: DomainPageParams) {
     if (!domain) return [];
 
     // Create a pseudo ProteinDomain to convert
-    const pseudoDomain = {
+    const pseudoDomain: ProteinDomain = {
       id: domain.id,
       range: domain.range,
-      rangeStart: domain.rangeStart,
-      rangeEnd: domain.rangeEnd,
+      rangeStart: parseInt(domain.range.split('-')[0]) || 0,
+      rangeEnd: parseInt(domain.range.split('-')[1]) || 0,
+      chainId: domain.chainId || 'A', // Add the missing chainId property
       ecod: {
-        xgroup: domain.classification.xgroup.id,
-        hgroup: domain.classification.hgroup.id,
-        tgroup: domain.classification.tgroup.id,
-        fgroup: domain.classification.fgroup.id
+        architecture: "Unknown", // Add the missing architecture property
+        xgroup: domain.ecod.xgroup,
+        hgroup: domain.ecod.hgroup,
+        tgroup: domain.ecod.tgroup,
+        fgroup: domain.ecod.fgroup
       },
-      color: '#FF5722', // Orange color for the domain
-      description: domain.description
+      color: colors[0],
+      description: domain.description || domain.name || 'Domain'
     };
-
-    return [convertDomainFormat(pseudoDomain)];
-  };
 
   // If loading, show loading state
   if (loading) {
