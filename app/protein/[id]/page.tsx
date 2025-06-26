@@ -400,6 +400,7 @@ export default function ProteinViewWithId({ params }: ProteinPageParams) {
                         range: d.range,
                         rangeStart: d.rangeStart,
                         rangeEnd: d.rangeEnd,
+                        pdbId: d.pdbId,
                         chainId: d.chainId,  // Added missing chainId property
                         ecod: {
                           architecture: d.ecod.architecture,  // Added missing architecture
