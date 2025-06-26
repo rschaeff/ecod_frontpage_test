@@ -303,7 +303,7 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
     return (
       <AppLayout
         title="Loading Manual Representative..."
-        activePage="tree"
+        activePage="browse"
         breadcrumbs={[{ label: 'Home', href: '/' }, { label: 'Browse', href: '/tree' }, { label: 'Loading...' }]}
       >
         <div className="flex justify-center items-center min-h-64">
@@ -317,7 +317,7 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
     return (
       <AppLayout
         title="Representative Domain Not Found"
-        activePage="tree"
+        activePage="browse"
         breadcrumbs={[{ label: 'Home', href: '/' }, { label: 'Browse', href: '/tree' }, { label: 'Error' }]}
       >
         <ErrorState
@@ -348,7 +348,7 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
     <AppLayout
       title={`${domain.id} - Manual Representative`}
       subtitle={domain.title}
-      activePage="tree"
+      activePage="browse"
       breadcrumbs={breadcrumbs}
     >
       {/* Representative Domain header */}
