@@ -93,7 +93,7 @@ export default function ECODTreePage() {
     <AppLayout
       title="ECOD Classification Tree Browser"
       subtitle="Browse the hierarchical classification of protein domains by A, X, H, T, and F groups"
-      activePage="tree"
+      activePage="browse"
       breadcrumbs={breadcrumbs}
     >
       {/* Search and filters section */}
