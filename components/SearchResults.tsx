@@ -121,6 +121,7 @@ export default function SearchResults({ className = '' }: SearchResultsProps) {
                             <h4 className="font-mono text-lg font-semibold text-blue-600">
                               {domain.id}
                             </h4>
+                            {/* Proper property access now that interface is updated */}
                             {domain.isRepresentative && (
                               <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">
                                 Representative
@@ -135,7 +136,7 @@ export default function SearchResults({ className = '' }: SearchResultsProps) {
                               {domain.sourceType.toUpperCase()}
                             </span>
                           </div>
-                          
+
                           {domain.range && (
                             <p className="text-sm text-gray-600 mb-2">
                               <strong>Range:</strong> {domain.range}
@@ -160,7 +161,7 @@ export default function SearchResults({ className = '' }: SearchResultsProps) {
                             )}
                           </div>
                         </div>
-                        
+
                         <div className="flex items-center space-x-2 ml-4">
                           <div className="text-right text-sm text-gray-500">
                             <div>Score: {domain.relevanceScore}</div>
@@ -241,7 +242,7 @@ export default function SearchResults({ className = '' }: SearchResultsProps) {
                   (Page {state.results.pagination.currentPage} of {state.results.pagination.totalPages})
                 </p>
                 <p className="text-xs mt-1">
-                  Use the API directly for pagination: 
+                  Use the API directly for pagination:
                   <code className="bg-gray-100 px-1 rounded ml-1">
                     /api/search?q={state.query}&limit=20&offset=20
                   </code>

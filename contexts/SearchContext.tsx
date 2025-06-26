@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useReducer, ReactNode, useEffect } from 'react';
 
-// Types for search state
+// Updated SearchResult interface with all necessary properties
 interface SearchResult {
   id: string;
   range: string;
@@ -10,12 +10,18 @@ interface SearchResult {
   hname: string;
   tname: string;
   proteinName: string;
+  sourceType: 'pdb' | 'csm';
+  relevanceScore?: number;
+  isRepresentative?: boolean;
+  isManual?: boolean;
+  domainLength?: number;
 }
 
 interface ClusterResult {
   id: string;
   label: string;
   name: string;
+  type?: string; // Added type for cluster classification
 }
 
 interface SearchState {
@@ -24,6 +30,10 @@ interface SearchState {
     domains: SearchResult[];
     clusters: ClusterResult[];
     totalResults: number;
+    pagination?: {
+      currentPage: number;
+      totalPages: number;
+    };
   } | null;
   loading: boolean;
   error: string | null;
@@ -143,11 +153,11 @@ export function SearchProvider({ children }: { children: ReactNode }) {
 
     try {
       const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-      
+
       if (!response.ok) {
         throw new Error(`Search failed with status: ${response.status}`);
       }
-      
+
       const data = await response.json();
       dispatch({ type: 'SEARCH_SUCCESS', payload: data });
     } catch (error) {
