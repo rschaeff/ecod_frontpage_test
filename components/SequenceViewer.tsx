@@ -32,7 +32,7 @@ interface SequenceViewerProps {
   highlights?: Highlight[];
   features?: Feature[];
   highlightedPosition?: number | null;
-  onPositionSelect?: (position: number) => void;
+  onPositionSelect?: (position: number | null) => void;
   showNumbering?: boolean;
   showAxis?: boolean;
   colorMapping?: Record<string, string>;
