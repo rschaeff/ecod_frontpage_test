@@ -144,7 +144,7 @@ const ProteinStructureViewer = forwardRef<ProteinStructureViewerRef, ProteinStru
         chainId: threeDMolDomain.chainId,
         start: threeDMolDomain.start,
         end: threeDMolDomain.end,
-        pdb_range: threeDMolDomain.pdb_range || `${threeDMolDomain.start}-${threeDMolDomain.end}`
+        range: `${threeDMolDomain.start}-${threeDMolDomain.end}`
       });
 
       return threeDMolDomain;
