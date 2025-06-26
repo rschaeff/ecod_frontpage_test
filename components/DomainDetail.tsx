@@ -470,7 +470,7 @@ export default function DomainDetail({ params }: DomainPageParams) {
       description: domain.description
     };
 
-    return [convertDomainFormat(pseudoDomain, domain.chainId)];
+    return [convertDomainFormat(pseudoDomain)];
   };
 
   // If loading, show loading state
