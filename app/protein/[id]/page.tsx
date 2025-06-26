@@ -392,8 +392,8 @@ export default function ProteinViewWithId({ params }: ProteinPageParams) {
                     id: protein.id,
                     uniprotId: protein.uniprotId || '',
                     name: protein.name,
-                    pdbID: protein.pdbId,
-                    chainId: protein.chainId
+                    pdbId: protein.pdbId,
+                    chainId: protein.chainId,
                     organism: protein.organism,
                     length: protein.length,
                     sequence: protein.sequence,
