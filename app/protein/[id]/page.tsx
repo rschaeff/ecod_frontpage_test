@@ -392,6 +392,8 @@ export default function ProteinViewWithId({ params }: ProteinPageParams) {
                     id: protein.id,
                     uniprotId: protein.uniprotId || '',
                     name: protein.name,
+                    pdbID: protein.pdbId,
+                    chainId: protein.chainId
                     organism: protein.organism,
                     length: protein.length,
                     sequence: protein.sequence,
@@ -400,7 +402,6 @@ export default function ProteinViewWithId({ params }: ProteinPageParams) {
                         range: d.range,
                         rangeStart: d.rangeStart,
                         rangeEnd: d.rangeEnd,
-                        pdbId: d.pdbId,
                         chainId: d.chainId,  // Added missing chainId property
                         ecod: {
                           architecture: d.ecod.architecture,  // Added missing architecture
