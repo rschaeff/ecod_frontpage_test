@@ -1,9 +1,13 @@
-// components/ContextBridge.tsx
+// components/ContextBridge.tsx - Fixed version
 'use client';
 
+import { ReactNode } from 'react';
 import { AppContextProvider } from '@/contexts/AppContextProvider';
 
-export default function ContextBridge({ children }) {
-  return <AppContextProvider>{children}</AppContextProvider>;
+interface ContextBridgeProps {
+  children: ReactNode;
 }
 
+export default function ContextBridge({ children }: ContextBridgeProps) {
+  return <AppContextProvider>{children}</AppContextProvider>;
+}
