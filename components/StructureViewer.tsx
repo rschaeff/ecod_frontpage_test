@@ -111,7 +111,7 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
       if (pluginRef.current) {
         try {
           pluginRef.current.managers.camera.reset();
-          pluginRef.current.managers.camera.focus();
+          // Removed the focus() call as it doesn't exist in Molstar CameraManager
         } catch (err) {
           console.error("Error resetting view:", err);
         }
@@ -657,9 +657,9 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
         );
       }
 
-      // Focus the camera on the structure
+      // Reset camera view to show the entire structure
       plugin.managers.camera.reset();
-      plugin.managers.camera.focus();
+      // Removed the focus() call as it doesn't exist in Molstar CameraManager
 
     } catch (err) {
       console.error('Error updating visualization:', err);
@@ -701,12 +701,16 @@ const StructureViewer = forwardRef<any, StructureViewerProps>(({
         }
       );
 
-      // Focus camera on the selected residue
-      const loci = plugin.managers.structure.hierarchy.current.structures[0].components[0].cell.obj?.data.
-        valueOf().model.atomicHierarchy.residueAtomSegments;
+      // Try to focus camera on the selected residue if the method exists
+      try {
+        const loci = plugin.managers.structure.hierarchy.current.structures[0].components[0].cell.obj?.data.
+          valueOf().model.atomicHierarchy.residueAtomSegments;
 
-      if (loci) {
-        plugin.managers.camera.focusLoci(loci);
+        if (loci && plugin.managers.camera.focusLoci) {
+          plugin.managers.camera.focusLoci(loci);
+        }
+      } catch (focusError) {
+        console.warn('Could not focus on residue, continuing without focus:', focusError);
       }
 
     } catch (err) {
