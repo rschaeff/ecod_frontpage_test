@@ -1,10 +1,23 @@
-// app/api/classification/[id]/route.ts
+// app/api/classification/[id]/route.ts - Fixed with proper TypeScript
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
+import type {
+  QueryResult,
+  ClusterRow,
+  ClassificationResponse,
+  ClassificationChild,
+  ClassificationRepresentative,
+  DomainClassificationPDBInfo,
+  DomainClassificationCSMInfo
+} from '@/types/database';
+
+interface RouteParams {
+  params: { id: string };
+}
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: RouteParams
 ) {
   try {
     const classificationId = params.id;
@@ -57,7 +70,7 @@ export async function GET(
     `;
 
     console.log('Fetching node with query:', nodeQuery, 'ID:', classificationId);
-    const nodeResult = await query(nodeQuery, [classificationId]);
+    const nodeResult: QueryResult<ClusterRow> = await query(nodeQuery, [classificationId]);
 
     if (nodeResult.rows.length === 0) {
       console.error('Classification node not found:', classificationId);
@@ -79,12 +92,12 @@ export async function GET(
     `;
 
     console.log('Fetching children for parent:', classificationId);
-    const childrenResult = await query(childrenQuery, [classificationId]);
+    const childrenResult: QueryResult<ClusterRow> = await query(childrenQuery, [classificationId]);
     console.log('Found children:', childrenResult.rows.length);
 
     // Get representative domains for this classification
     // Only fetch representatives for F-groups (leaf nodes)
-    let domainsResult = { rows: [] };
+    let domainsResult: QueryResult<DomainClassificationPDBInfo | DomainClassificationCSMInfo> = { rows: [], rowCount: 0 };
 
     if (level === 'F') {
       const domainsQuery = `
@@ -124,20 +137,20 @@ export async function GET(
       console.log('Found representative domains:', domainsResult.rows.length);
     }
 
-    // Format response
-    const response = {
+    // Format response with proper typing
+    const response: ClassificationResponse = {
       id: node.id,
       name: node.name,
       level: level, // Use the detected level
       parent: node.parent,
       domainCount: node.domain_number || 0,
-      children: childrenResult.rows.map(child => ({
+      children: childrenResult.rows.map((child: ClusterRow): ClassificationChild => ({
         id: child.id,
         name: child.name,
         level: child.type.toUpperCase(),
         domainCount: child.domain_number || 0
       })),
-      representatives: domainsResult.rows.map(domain => ({
+      representatives: domainsResult.rows.map((domain: any): ClassificationRepresentative => ({
         id: domain.id,
         range: domain.range || '',
         pdb_id: domain.pdb_id,

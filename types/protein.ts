@@ -1,4 +1,4 @@
-// types/protein.ts - CORRECTED VERSION
+// types/protein.ts - Updated with proper interfaces
 
 export interface ProteinDomain {
   id: string;                    // e.g., "e2uubA1", "e2uubA2"
@@ -40,55 +40,30 @@ export interface ProteinPageParams {
   };
 }
 
-// Example corrected data:
-export const mockProteinData: ProteinChain = {
-  pdbId: "2UUB",
-  chainId: "A",
-  id: "2UUB_A",
-  entityId: 1,
-  uniprotId: "P20226",
-  name: "TATA-box-binding protein",
-  organism: "Homo sapiens",
-  length: 240,                   // ACTUAL chain A length, not domain end
-  sequence: "MDQNNSLPPYAQ...",   // ACTUAL chain A sequence
-  domains: [
-    {
-      id: "e2uubA1",
-      range: "1-120",              // Relative to chain A
-      rangeStart: 1,
-      rangeEnd: 120,
-      chainId: "A",
-      ecod: {
-        architecture: "Alpha proteins",
-        xgroup: "1.1",             // NO prefixes
-        hgroup: "1.1.1",           // NO prefixes
-        tgroup: "1.1.1.1",         // NO prefixes
-        fgroup: "1.1.1.1.1"        // NO prefixes
-      },
-      color: "#4285F4",
-      description: "TATA-binding protein, N-terminal domain"
-    },
-    {
-      id: "e2uubA2",
-      range: "121-240",            // Relative to chain A
-      rangeStart: 121,
-      rangeEnd: 240,
-      chainId: "A",
-      ecod: {
-        architecture: "Alpha proteins",
-        xgroup: "1.1",
-        hgroup: "1.1.1",
-        tgroup: "1.1.1.1",
-        fgroup: "1.1.1.1.2"        // Different F-group
-      },
-      color: "#EA4335",
-      description: "TATA-binding protein, C-terminal domain"
-    }
-  ],
-  resolution: "2.1Å",
-  method: "X-ray diffraction",
-  releaseDate: "2023-06-15"
-};
+// 3DMol viewer interface (fixing the missing reference)
+export interface ThreeDMolDomain {
+  id: string;
+  chainId: string;
+  start: number;
+  end: number;
+  color: string;
+  label: string;
+  classification: {
+    t_group: string;
+    h_group: string;
+    x_group: string;
+    a_group: string;
+  };
+}
+
+// Viewer options for structure visualization
+export interface ViewerOptions {
+  style: 'cartoon' | 'ball-and-stick' | 'surface' | 'spacefill';
+  showSideChains: boolean;
+  showLigands: boolean;
+  showLabels: boolean;
+  zoom: number;
+}
 
 // Route parsing utility
 export function parseProteinId(routeId: string): { pdbId: string; chainId: string } {
@@ -138,3 +113,53 @@ export function convertDomainFormat(domain: ProteinDomain): ThreeDMolDomain {
     }
   };
 }
+
+// Example corrected data:
+export const mockProteinData: ProteinChain = {
+  pdbId: "2UUB",
+  chainId: "A",
+  id: "2UUB_A",
+  entityId: 1,
+  uniprotId: "P20226",
+  name: "TATA-box-binding protein",
+  organism: "Homo sapiens",
+  length: 240,                   // ACTUAL chain A length, not domain end
+  sequence: "MDQNNSLPPYAQGLASPQGAMTPGIPIFSPMMPYGTGLTPQPIQNTNSLSILEEQQRQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQAVAAAAVQQSTSQQATQGTSGQAPQLFHSQTLTTAPLPGTTPLYPSPMTPMTPITPATPASESSKVDNCSESYNEDNKTFPTEGIQTGAAAAAAAVSYLGYKFSVNQFCGVMNHDLNSKIILDRFSKEQSRLAARKYILGTTVKPHHRICQFKLGPKKFDENRNAVIPKSKIPEFLAQLTEDY",
+  domains: [
+    {
+      id: "e2uubA1",
+      range: "1-120",              // Relative to chain A
+      rangeStart: 1,
+      rangeEnd: 120,
+      chainId: "A",
+      ecod: {
+        architecture: "Alpha proteins",
+        xgroup: "1.1",             // NO prefixes
+        hgroup: "1.1.1",           // NO prefixes
+        tgroup: "1.1.1.1",         // NO prefixes
+        fgroup: "1.1.1.1.1"        // NO prefixes
+      },
+      color: "#4285F4",
+      description: "TATA-binding protein, N-terminal domain"
+    },
+    {
+      id: "e2uubA2",
+      range: "121-240",            // Relative to chain A
+      rangeStart: 121,
+      rangeEnd: 240,
+      chainId: "A",
+      ecod: {
+        architecture: "Alpha proteins",
+        xgroup: "1.1",
+        hgroup: "1.1.1",
+        tgroup: "1.1.1.1",
+        fgroup: "1.1.1.1.2"        // Different F-group
+      },
+      color: "#EA4335",
+      description: "TATA-binding protein, C-terminal domain"
+    }
+  ],
+  resolution: "2.1Å",
+  method: "X-ray diffraction",
+  releaseDate: "2023-06-15"
+};
