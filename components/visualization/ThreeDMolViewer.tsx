@@ -1,22 +1,127 @@
-// Updated ThreeDMolViewer.tsx - Focus on protein chain only
-
-'use client'
+// components/visualization/ThreeDMolViewer.tsx
+'use client';
 
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
+import { AlertTriangle, RefreshCw, Camera, ZoomIn, ZoomOut, RotateCcw, Settings, ExternalLink } from 'lucide-react';
 
-// Domain colors with high contrast
-const DOMAIN_COLORS = [
-  '#FF0000', // Red
-  '#0066FF', // Blue
-  '#00CC00', // Green
-  '#FF6600', // Orange
-  '#9900CC', // Purple
-  '#00CCCC', // Cyan
-  '#CC6600', // Brown
-  '#FF99CC', // Pink
-  '#666666', // Gray
-  '#336699', // Steel Blue
-];
+// =============================================================================
+// UI COMPONENTS (Missing imports - implemented here)
+// =============================================================================
+
+interface ButtonProps {
+  size?: 'sm' | 'md' | 'lg';
+  variant?: 'default' | 'outline' | 'destructive' | 'secondary';
+  disabled?: boolean;
+  onClick?: () => void;
+  children: React.ReactNode;
+  className?: string;
+  title?: string;
+}
+
+const Button: React.FC<ButtonProps> = ({
+  size = 'md',
+  variant = 'default',
+  disabled = false,
+  onClick,
+  children,
+  className = '',
+  title
+}) => {
+  const baseClasses = 'inline-flex items-center justify-center rounded font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2';
+
+  const sizeClasses = {
+    sm: 'px-2 py-1 text-xs',
+    md: 'px-3 py-2 text-sm',
+    lg: 'px-4 py-2 text-base'
+  };
+
+  const variantClasses = {
+    default: 'bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-300',
+    outline: 'border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400',
+    destructive: 'bg-red-600 text-white hover:bg-red-700 disabled:bg-red-300',
+    secondary: 'bg-gray-100 text-gray-900 hover:bg-gray-200 disabled:bg-gray-50'
+  };
+
+  return (
+    <button
+      className={`${baseClasses} ${sizeClasses[size]} ${variantClasses[variant]} ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'} ${className}`}
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+    >
+      {children}
+    </button>
+  );
+};
+
+interface CardProps {
+  className?: string;
+  children: React.ReactNode;
+}
+
+const Card: React.FC<CardProps> = ({ className = '', children }) => (
+  <div className={`bg-white rounded-lg border border-gray-200 shadow-sm ${className}`}>
+    {children}
+  </div>
+);
+
+interface BadgeProps {
+  variant?: 'default' | 'secondary' | 'outline' | 'destructive';
+  className?: string;
+  children: React.ReactNode;
+}
+
+const Badge: React.FC<BadgeProps> = ({ variant = 'default', className = '', children }) => {
+  const variants = {
+    default: 'bg-blue-100 text-blue-800 border-blue-200',
+    secondary: 'bg-gray-100 text-gray-800 border-gray-200',
+    outline: 'border border-gray-300 text-gray-700 bg-white',
+    destructive: 'bg-red-100 text-red-800 border-red-200'
+  };
+
+  return (
+    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${variants[variant]} ${className}`}>
+      {children}
+    </span>
+  );
+};
+
+interface TooltipProps {
+  content: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}
+
+const Tooltip: React.FC<TooltipProps> = ({ content, children, className = '' }) => (
+  <div className={`relative group ${className}`}>
+    {children}
+    <div className="invisible group-hover:visible absolute z-50 px-2 py-1 text-xs bg-gray-900 text-white rounded-md whitespace-nowrap bottom-full left-1/2 transform -translate-x-1/2 -translate-y-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+      {content}
+      <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-2 border-r-2 border-t-2 border-transparent border-t-gray-900"></div>
+    </div>
+  </div>
+);
+
+interface LoadingSpinnerProps {
+  size?: 'sm' | 'md' | 'lg';
+  className?: string;
+}
+
+const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({ size = 'md', className = '' }) => {
+  const sizeClasses = {
+    sm: 'w-4 h-4',
+    md: 'w-6 h-6',
+    lg: 'w-8 h-8'
+  };
+
+  return (
+    <div className={`animate-spin rounded-full border-2 border-gray-300 border-t-blue-600 ${sizeClasses[size]} ${className}`} />
+  );
+};
+
+// =============================================================================
+// TYPES AND INTERFACES
+// =============================================================================
 
 export interface Domain {
   id: string;
@@ -26,8 +131,8 @@ export interface Domain {
   color: string;
   label?: string;
   pdb_range?: string;
-  pdb_start?: string;
-  pdb_end?: string;
+  pdb_start?: string | number;
+  pdb_end?: string | number;
   classification?: {
     t_group?: string;
     h_group?: string;
@@ -36,10 +141,53 @@ export interface Domain {
   };
 }
 
+interface StructureSelection {
+  chain?: string;
+  resi?: string | number;
+  atom?: string;
+}
+
+interface StructureInfo {
+  actualChain: string;
+  originalChain?: string;
+  minResidue: number;
+  maxResidue: number;
+  totalResidues: number;
+  residueList: number[];
+  allChains: string[];
+  chainType: 'protein' | 'nucleic acid' | 'unknown';
+}
+
+interface ChainInfo {
+  chain: string;
+  atomCount: number;
+  caCount: number;
+  pCount: number;
+  residues: Set<number>;
+  atomTypes: Set<string>;
+  residueCount: number;
+  isProtein: boolean;
+  isNucleicAcid: boolean;
+  proteinScore: number;
+  nucAcidScore: number;
+}
+
+interface ViewerMethods {
+  reset: () => void;
+  exportImage: () => string | null;
+  highlightDomain: (domainIndex: number) => void;
+  zoomToDomain: (domainIndex: number) => void;
+  reload: () => void;
+  updateStyle: (options: any) => void;
+  zoomIn: () => void;
+  zoomOut: () => void;
+}
+
 interface ThreeDMolViewerProps {
   pdbId: string;
   chainId?: string;
   domains?: Domain[];
+  highlightedDomain?: string | null;
   width?: string | number;
   height?: string | number;
   className?: string;
@@ -49,12 +197,29 @@ interface ThreeDMolViewerProps {
   onError?: (error: string) => void;
   showLoading?: boolean;
   showControls?: boolean;
+  viewerOptions?: {
+    style?: string;
+    showSideChains?: boolean;
+    showLigands?: boolean;
+    showLabels?: boolean;
+  };
 }
 
-const ThreeDMolViewer = forwardRef<any, ThreeDMolViewerProps>(({
+// Domain colors with high contrast
+const DOMAIN_COLORS = [
+  '#FF0000', '#0066FF', '#00CC00', '#FF6600', '#9900CC', '#00CCCC',
+  '#CC6600', '#FF99CC', '#666666', '#336699', '#FF6B6B', '#4ECDC4'
+];
+
+// =============================================================================
+// MAIN COMPONENT
+// =============================================================================
+
+const ThreeDMolViewer = forwardRef<ViewerMethods, ThreeDMolViewerProps>(({
   pdbId,
   chainId,
   domains = [],
+  highlightedDomain = null,
   width = '100%',
   height = '400px',
   className = '',
@@ -63,61 +228,84 @@ const ThreeDMolViewer = forwardRef<any, ThreeDMolViewerProps>(({
   onStructureLoaded,
   onError,
   showLoading = true,
-  showControls = false
+  showControls = false,
+  viewerOptions = {}
 }, ref) => {
   // Refs
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<any>(null);
   const loadedRef = useRef(false);
   const lastAppliedDomainsRef = useRef<Domain[]>([]);
-  const structureInfoRef = useRef<any>(null);
+  const structureInfoRef = useRef<StructureInfo | null>(null);
 
   // State
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [currentViewerOptions, setCurrentViewerOptions] = useState({
+    style: 'cartoon',
+    showSideChains: false,
+    showLigands: true,
+    showLabels: false,
+    ...viewerOptions
+  });
 
-  // Debug function
+  // =============================================================================
+  // UTILITY FUNCTIONS
+  // =============================================================================
+
   const debugLog = (message: string, data?: any) => {
     if (process.env.NODE_ENV === 'development') {
       console.log(`[3DMol] ${message}`, data || '');
     }
   };
 
-  // Analyze structure to understand residue numbering and available chains
-  const analyzeStructure = (viewer: any, targetChain?: string, mmcifData?: string) => {
-    try {
-      // Get all atoms first to see what chains are available
-      const allAtoms = viewer.selectedAtoms({});
-      const chainInfo = new Map();
+  const handleError = (message: string) => {
+    debugLog(`Error: ${message}`);
+    setErrorMessage(message);
+    setIsLoading(false);
+    onError?.(message);
+  };
 
-      // Analyze each chain to determine if it's protein, DNA, RNA, etc.
+  // Analyze structure to understand residue numbering and available chains
+  const analyzeStructure = (viewer: any, targetChain?: string): StructureInfo | null => {
+    try {
+      const allAtoms = viewer.selectedAtoms({});
+      const chainInfoMap = new Map<string, ChainInfo>();
+
+      // Analyze each chain
       allAtoms.forEach((atom: any) => {
-        if (!chainInfo.has(atom.chain)) {
-          chainInfo.set(atom.chain, {
+        if (!chainInfoMap.has(atom.chain)) {
+          chainInfoMap.set(atom.chain, {
             chain: atom.chain,
             atomCount: 0,
             caCount: 0,
             pCount: 0,
             residues: new Set(),
-            atomTypes: new Set()
+            atomTypes: new Set(),
+            residueCount: 0,
+            isProtein: false,
+            isNucleicAcid: false,
+            proteinScore: 0,
+            nucAcidScore: 0
           });
         }
 
-        const info = chainInfo.get(atom.chain);
+        const info = chainInfoMap.get(atom.chain)!;
         info.atomCount++;
         info.atomTypes.add(atom.atom);
 
-        if (atom.atom === 'CA') info.caCount++;  // Protein alpha carbon
-        if (atom.atom === 'P') info.pCount++;    // Nucleic acid phosphorus
-        if (atom.resi) info.residues.add(atom.resi);
+        if (atom.atom === 'CA') info.caCount++;
+        if (atom.atom === 'P') info.pCount++;
+        if (atom.resi) info.residues.add(parseInt(atom.resi));
       });
 
       // Classify chains
-      const chains = Array.from(chainInfo.values()).map(info => ({
+      const chains: ChainInfo[] = Array.from(chainInfoMap.values()).map(info => ({
         ...info,
         residueCount: info.residues.size,
-        isProtein: info.caCount > 10, // Has many CA atoms = protein
-        isNucleicAcid: info.pCount > 5, // Has many P atoms = DNA/RNA
+        isProtein: info.caCount > 10,
+        isNucleicAcid: info.pCount > 5,
         proteinScore: info.caCount / Math.max(info.atomCount, 1),
         nucAcidScore: info.pCount / Math.max(info.atomCount, 1)
       }));
@@ -131,10 +319,9 @@ const ThreeDMolViewer = forwardRef<any, ThreeDMolViewerProps>(({
         const targetInfo = chains.find(c => c.chain === targetChain);
         if (!targetInfo) {
           debugLog(`Target chain ${targetChain} not found`);
-          actualChain = null;
+          actualChain = undefined;
         } else if (!targetInfo.isProtein) {
           debugLog(`Target chain ${targetChain} is not a protein (CA count: ${targetInfo.caCount})`);
-          // Don't override - user explicitly requested this chain
         }
       }
 
@@ -148,11 +335,8 @@ const ThreeDMolViewer = forwardRef<any, ThreeDMolViewerProps>(({
           actualChain = proteinChains[0].chain;
           debugLog(`Auto-selected protein chain: ${actualChain} (${proteinChains[0].caCount} CA atoms)`);
         } else {
-          // No protein chains found - this might be DNA/RNA only structure
           const allChainsList = chains.map(c => c.chain).join(', ');
-          const error = `No protein chains found in structure. Available chains: ${allChainsList}`;
-          debugLog(error);
-          throw new Error(error);
+          throw new Error(`No protein chains found. Available chains: ${allChainsList}`);
         }
       }
 
@@ -162,7 +346,7 @@ const ThreeDMolViewer = forwardRef<any, ThreeDMolViewerProps>(({
         throw new Error(`Chain ${actualChain} not found`);
       }
 
-      const atoms = viewer.selectedAtoms({chain: actualChain});
+      const atoms = viewer.selectedAtoms({ chain: actualChain });
       const residues = new Set<number>();
       atoms.forEach((atom: any) => {
         if (atom.resi) {
@@ -171,20 +355,18 @@ const ThreeDMolViewer = forwardRef<any, ThreeDMolViewerProps>(({
       });
 
       const sortedResidues = Array.from(residues).sort((a, b) => a - b);
-      const info = {
+
+      return {
         actualChain,
         originalChain: targetChain,
-        minResidue: sortedResidues[0],
-        maxResidue: sortedResidues[sortedResidues.length - 1],
+        minResidue: sortedResidues[0] || 1,
+        maxResidue: sortedResidues[sortedResidues.length - 1] || 1,
         totalResidues: sortedResidues.length,
         residueList: sortedResidues,
         allChains: chains.map(c => c.chain),
         chainType: targetChainInfo.isProtein ? 'protein' :
                    targetChainInfo.isNucleicAcid ? 'nucleic acid' : 'unknown'
       };
-
-      debugLog(`Structure analysis for chain ${actualChain}:`, info);
-      return info;
     } catch (error) {
       debugLog('Error analyzing structure:', error);
       return null;
@@ -192,15 +374,13 @@ const ThreeDMolViewer = forwardRef<any, ThreeDMolViewerProps>(({
   };
 
   // Enhanced coordinate mapping
-  const mapSequenceToStructure = (seqStart: number, seqEnd: number, structureInfo: any) => {
-    if (!structureInfo) return null;
-
-    // Try direct mapping first (common case)
+  const mapSequenceToStructure = (seqStart: number, seqEnd: number, structureInfo: StructureInfo): string | null => {
+    // Try direct mapping first
     if (seqStart >= structureInfo.minResidue && seqEnd <= structureInfo.maxResidue) {
       return `${seqStart}-${seqEnd}`;
     }
 
-    // Try offset mapping (sequence starts from 1, structure might start from different number)
+    // Try offset mapping
     const offset = structureInfo.minResidue - 1;
     const mappedStart = seqStart + offset;
     const mappedEnd = seqEnd + offset;
@@ -214,8 +394,8 @@ const ThreeDMolViewer = forwardRef<any, ThreeDMolViewerProps>(({
     return null;
   };
 
-  // Check if selection exists with detailed feedback
-  const checkSelectionExists = (viewer: any, selection: any): boolean => {
+  // Check if selection exists
+  const checkSelectionExists = (viewer: any, selection: StructureSelection): boolean => {
     if (!viewer) return false;
 
     try {
@@ -229,88 +409,8 @@ const ThreeDMolViewer = forwardRef<any, ThreeDMolViewerProps>(({
     }
   };
 
-  // Expose the viewer methods via ref
-  useImperativeHandle(ref, () => ({
-    current: {
-      viewerRef: viewerRef,
-      reset: () => {
-        if (viewerRef.current) {
-          try {
-            // Apply the original domain styling
-            applyDomainStyling(viewerRef.current);
-
-            // Focus on the protein chain only
-            const targetChain = structureInfoRef.current?.actualChain || chainId;
-            if (targetChain) {
-              viewerRef.current.zoomTo({chain: targetChain});
-            } else {
-              viewerRef.current.zoomTo();
-            }
-
-            viewerRef.current.render();
-          } catch (error) {
-            debugLog('Error in reset:', error);
-          }
-        }
-      },
-      exportImage: () => {
-        if (viewerRef.current) {
-          return viewerRef.current.pngURI();
-        }
-        return null;
-      },
-      highlightDomain: (domainIndex: number) => {
-        if (!viewerRef.current || domains.length <= domainIndex) return;
-
-        const domain = domains[domainIndex];
-        const targetChain = structureInfoRef.current?.actualChain || domain.chainId || chainId || 'A';
-
-        try {
-          debugLog(`Highlighting domain: ${domain.id}, range: ${domain.start}-${domain.end}, chain: ${targetChain}`);
-
-          // Get mapped range
-          const mappedRange = getMappedRange(domain);
-          if (!mappedRange) {
-            debugLog('Could not map domain range for highlighting');
-            return;
-          }
-
-          const selection = {
-            chain: targetChain,
-            resi: mappedRange
-          };
-
-          // Set background to low opacity (protein chain only)
-          viewerRef.current.setStyle({chain: targetChain}, { cartoon: { color: 'gray', opacity: 0.3 } });
-
-          // Highlight the specific domain
-          viewerRef.current.setStyle(selection, {
-            cartoon: {
-              color: domain.color,
-              opacity: 1.0
-            }
-          });
-
-          // Zoom to the domain
-          viewerRef.current.zoomTo(selection);
-          viewerRef.current.render();
-        } catch (error) {
-          debugLog('Error highlighting domain:', error);
-          // Recovery: restore original styling
-          try {
-            applyDomainStyling(viewerRef.current);
-            viewerRef.current.render();
-          } catch (recoveryError) {
-            debugLog('Failed to recover from highlighting error:', recoveryError);
-          }
-        }
-      }
-    }
-  }));
-
   // Get mapped range for a domain
   const getMappedRange = (domain: Domain): string | null => {
-    // Use PDB range if available
     if (domain.pdb_range) {
       return domain.pdb_range;
     }
@@ -319,12 +419,10 @@ const ThreeDMolViewer = forwardRef<any, ThreeDMolViewerProps>(({
       return `${domain.pdb_start}-${domain.pdb_end}`;
     }
 
-    // Try to map sequence coordinates to structure
     if (structureInfoRef.current && domain.start && domain.end) {
       return mapSequenceToStructure(domain.start, domain.end, structureInfoRef.current);
     }
 
-    // Fallback to sequence range
     if (domain.start && domain.end) {
       return `${domain.start}-${domain.end}`;
     }
@@ -332,254 +430,333 @@ const ThreeDMolViewer = forwardRef<any, ThreeDMolViewerProps>(({
     return null;
   };
 
-  // Safe error handler
-  const handleError = (message: string) => {
-    debugLog(`Error: ${message}`);
-    setErrorMessage(message);
-    setIsLoading(false);
-    if (onError) {
-      try {
-        onError(message);
-      } catch (callbackError) {
-        debugLog('Error in onError callback:', callbackError);
-      }
-    }
-  };
-
-  // Apply domain styling with improved approach - PROTEIN CHAIN ONLY
+  // Apply domain styling
   const applyDomainStyling = (viewer: any) => {
-    if (!viewer) return;
+    if (!viewer || !structureInfoRef.current) return;
 
-    const targetChain = structureInfoRef.current?.actualChain || chainId || 'A';
+    const targetChain = structureInfoRef.current.actualChain;
     debugLog(`Applying styling for ${domains.length} domains on protein chain ${targetChain}`);
 
-    // CRITICAL: Hide all non-protein chains and focus on target chain only
-    // Step 1: Hide everything first
-    viewer.setStyle({}, { cartoon: { opacity: 0 }, stick: { opacity: 0 }, sphere: { opacity: 0 } });
+    try {
+      // Hide everything first
+      viewer.setStyle({}, {
+        cartoon: { opacity: 0 },
+        stick: { opacity: 0 },
+        sphere: { opacity: 0 }
+      });
 
-    // Step 2: Show only the target protein chain in gray
-    viewer.setStyle({chain: targetChain}, {
-      cartoon: {
-        color: 'gray',
-        opacity: 0.8
-      }
-    });
-
-    // Step 3: Apply domain colors on top of the gray background
-    if (domains.length > 0) {
-      let successfulDomains = 0;
-
-      domains.forEach((domain, index) => {
-        try {
-          debugLog(`Processing domain ${index} (${domain.id}):`, {
-            start: domain.start,
-            end: domain.end,
-            pdb_range: domain.pdb_range,
-            pdb_start: domain.pdb_start,
-            pdb_end: domain.pdb_end,
-            color: domain.color,
-            chainId: domain.chainId
-          });
-
-          // Get the best range to use
-          const mappedRange = getMappedRange(domain);
-
-          if (!mappedRange) {
-            debugLog(`Skipping domain ${domain.id} - no valid range`);
-            return;
-          }
-
-          // Use the domain's chain ID or fall back to target chain
-          const domainChainId = domain.chainId || targetChain;
-          const selection = {
-            chain: domainChainId,
-            resi: mappedRange
-          };
-
-          // Check if this selection exists in the structure
-          const selectionExists = checkSelectionExists(viewer, selection);
-
-          if (selectionExists) {
-            // Apply domain color
-            const domainColor = domain.color || DOMAIN_COLORS[index % DOMAIN_COLORS.length];
-
-            viewer.setStyle(selection, {
-              cartoon: {
-                color: domainColor,
-                opacity: 1.0
-              }
-            });
-
-            successfulDomains++;
-            debugLog(`✓ Styled domain ${domain.id} with range ${mappedRange} on chain ${domainChainId}`);
-          } else {
-            debugLog(`⚠ Domain ${domain.id} range ${mappedRange} not found in chain ${domainChainId}`);
-          }
-
-        } catch (domainError) {
-          debugLog(`Error processing domain ${domain.id}:`, domainError);
+      // Show only the target protein chain
+      viewer.setStyle({ chain: targetChain }, {
+        cartoon: {
+          color: 'gray',
+          opacity: 0.8
         }
       });
 
-      debugLog(`Successfully styled ${successfulDomains}/${domains.length} domains`);
-    }
+      // Apply domain colors
+      if (domains.length > 0) {
+        let successfulDomains = 0;
 
-    // Step 4: Force render
-    viewer.render();
-    lastAppliedDomainsRef.current = [...domains];
+        domains.forEach((domain, index) => {
+          try {
+            const mappedRange = getMappedRange(domain);
+            if (!mappedRange) {
+              debugLog(`Skipping domain ${domain.id} - no valid range`);
+              return;
+            }
+
+            const domainChainId = domain.chainId || targetChain;
+            const selection = {
+              chain: domainChainId,
+              resi: mappedRange
+            };
+
+            if (checkSelectionExists(viewer, selection)) {
+              const domainColor = domain.color || DOMAIN_COLORS[index % DOMAIN_COLORS.length];
+
+              viewer.setStyle(selection, {
+                cartoon: {
+                  color: domainColor,
+                  opacity: 1.0
+                }
+              });
+
+              successfulDomains++;
+              debugLog(`✓ Styled domain ${domain.id} with range ${mappedRange}`);
+            } else {
+              debugLog(`⚠ Domain ${domain.id} range ${mappedRange} not found`);
+            }
+          } catch (domainError) {
+            debugLog(`Error processing domain ${domain.id}:`, domainError);
+          }
+        });
+
+        debugLog(`Successfully styled ${successfulDomains}/${domains.length} domains`);
+      }
+
+      viewer.render();
+      lastAppliedDomainsRef.current = [...domains];
+    } catch (error) {
+      debugLog('Error in applyDomainStyling:', error);
+    }
   };
 
-  // Initialize and load structure
-  useEffect(() => {
-    // Only run in browser environment
+  // =============================================================================
+  // EXPOSED METHODS VIA REF
+  // =============================================================================
+
+  useImperativeHandle(ref, () => ({
+    reset: () => {
+      if (viewerRef.current && structureInfoRef.current) {
+        try {
+          applyDomainStyling(viewerRef.current);
+          const targetChain = structureInfoRef.current.actualChain;
+          viewerRef.current.zoomTo({ chain: targetChain });
+          viewerRef.current.render();
+        } catch (error) {
+          debugLog('Error in reset:', error);
+        }
+      }
+    },
+    exportImage: () => {
+      if (viewerRef.current) {
+        try {
+          return viewerRef.current.pngURI();
+        } catch (error) {
+          debugLog('Error exporting image:', error);
+          return null;
+        }
+      }
+      return null;
+    },
+    highlightDomain: (domainIndex: number) => {
+      if (!viewerRef.current || domains.length <= domainIndex || !structureInfoRef.current) return;
+
+      const domain = domains[domainIndex];
+      const targetChain = structureInfoRef.current.actualChain;
+
+      try {
+        const mappedRange = getMappedRange(domain);
+        if (!mappedRange) {
+          debugLog('Could not map domain range for highlighting');
+          return;
+        }
+
+        const selection = {
+          chain: targetChain,
+          resi: mappedRange
+        };
+
+        // Set background to low opacity
+        viewerRef.current.setStyle({ chain: targetChain }, {
+          cartoon: { color: 'gray', opacity: 0.3 }
+        });
+
+        // Highlight the specific domain
+        viewerRef.current.setStyle(selection, {
+          cartoon: {
+            color: domain.color,
+            opacity: 1.0
+          }
+        });
+
+        viewerRef.current.zoomTo(selection);
+        viewerRef.current.render();
+      } catch (error) {
+        debugLog('Error highlighting domain:', error);
+        applyDomainStyling(viewerRef.current);
+      }
+    },
+    zoomToDomain: (domainIndex: number) => {
+      if (!viewerRef.current || domains.length <= domainIndex || !structureInfoRef.current) return;
+
+      const domain = domains[domainIndex];
+      const targetChain = structureInfoRef.current.actualChain;
+      const mappedRange = getMappedRange(domain);
+
+      if (mappedRange) {
+        try {
+          viewerRef.current.zoomTo({ chain: targetChain, resi: mappedRange });
+          viewerRef.current.render();
+        } catch (error) {
+          debugLog('Error zooming to domain:', error);
+        }
+      }
+    },
+    reload: () => {
+      setIsLoading(true);
+      setErrorMessage(null);
+      loadedRef.current = false;
+      // Trigger re-initialization
+      if (containerRef.current) {
+        initializeViewer();
+      }
+    },
+    updateStyle: (options: any) => {
+      setCurrentViewerOptions(prev => ({ ...prev, ...options }));
+      if (viewerRef.current) {
+        applyDomainStyling(viewerRef.current);
+      }
+    },
+    zoomIn: () => {
+      if (viewerRef.current) {
+        try {
+          viewerRef.current.zoom(1.2);
+          viewerRef.current.render();
+        } catch (error) {
+          debugLog('Error zooming in:', error);
+        }
+      }
+    },
+    zoomOut: () => {
+      if (viewerRef.current) {
+        try {
+          viewerRef.current.zoom(0.8);
+          viewerRef.current.render();
+        } catch (error) {
+          debugLog('Error zooming out:', error);
+        }
+      }
+    }
+  }));
+
+  // =============================================================================
+  // INITIALIZATION
+  // =============================================================================
+
+  const initializeViewer = async () => {
     if (typeof window === 'undefined' || !containerRef.current) return;
 
-    // Reset state for new PDB ID
     setIsLoading(true);
     setErrorMessage(null);
     loadedRef.current = false;
-    lastAppliedDomainsRef.current = [];
     structureInfoRef.current = null;
 
-    const init3DMol = async () => {
-      try {
-        // Import 3DMol dynamically to avoid SSR issues
-        const $3Dmol = await import('3dmol');
-        debugLog('3DMol library loaded');
+    try {
+      const $3Dmol = await import('3dmol');
+      debugLog('3DMol library loaded');
 
-        // Clean up previous viewer if it exists
-        if (viewerRef.current) {
-          try {
-            viewerRef.current.removeAllModels();
-            if (typeof viewerRef.current.destroy === 'function') {
-              viewerRef.current.destroy();
-            }
-          } catch (e) {
-            // Ignore cleanup errors
-          }
-          viewerRef.current = null;
-        }
-
-        // Create a new viewer
-        const config = {
-          backgroundColor: backgroundColor || 'white',
-          id: containerRef.current.id
-        };
-
-        debugLog('Creating 3DMol viewer with config:', config);
-        const viewer = $3Dmol.createViewer(containerRef.current, config);
-        viewerRef.current = viewer;
-
-        // Load structure using mmCIF format
-        debugLog(`Loading PDB ID: ${pdbId} (mmCIF format) for chain: ${chainId || 'auto-detect'}`);
-
-        // Try the local API first (now serves mmCIF)
-        const structureUrl = `/api/pdb/${pdbId}`;
-
-        // Load structure with fetch and explicit format
+      // Clean up previous viewer
+      if (viewerRef.current) {
         try {
-          const response = await fetch(structureUrl);
-          if (response.ok) {
-            const structureData = await response.text();
+          viewerRef.current.removeAllModels();
+          if (typeof viewerRef.current.destroy === 'function') {
+            viewerRef.current.destroy();
+          }
+        } catch (e) {
+          // Ignore cleanup errors
+        }
+        viewerRef.current = null;
+      }
 
-            // Validate mmCIF data
-            if (structureData.includes('data_') || structureData.includes('_entry.id')) {
-              debugLog('mmCIF structure loaded successfully from local API');
+      // Create new viewer
+      const config = {
+        backgroundColor: backgroundColor || 'white',
+        id: containerRef.current.id
+      };
 
-              // Add model with explicit mmCIF format
-              const model = viewer.addModel(structureData, 'cif');
-              if (model) {
-                processLoadedStructure(viewer, structureData);
-              } else {
-                throw new Error('Failed to parse mmCIF data');
-              }
+      debugLog('Creating 3DMol viewer with config:', config);
+      const viewer = $3Dmol.createViewer(containerRef.current, config);
+      viewerRef.current = viewer;
+
+      // Load structure
+      await loadStructure(viewer);
+
+    } catch (error) {
+      handleError(`Error initializing 3DMol.js: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  const loadStructure = async (viewer: any) => {
+    debugLog(`Loading PDB ID: ${pdbId} for chain: ${chainId || 'auto-detect'}`);
+
+    try {
+      // Try local API first
+      const structureUrl = `/api/pdb/${pdbId}`;
+      const response = await fetch(structureUrl);
+
+      if (response.ok) {
+        const structureData = await response.text();
+        if (structureData.includes('data_') || structureData.includes('_entry.id')) {
+          debugLog('mmCIF structure loaded successfully from local API');
+          const model = viewer.addModel(structureData, 'cif');
+          if (model) {
+            processLoadedStructure(viewer);
+          } else {
+            throw new Error('Failed to parse mmCIF data');
+          }
+        } else {
+          throw new Error('Invalid mmCIF data received');
+        }
+      } else {
+        throw new Error(`API returned ${response.status}: ${response.statusText}`);
+      }
+    } catch (apiError) {
+      debugLog('Local API failed, trying RCSB direct:', apiError);
+
+      try {
+        const rcsbUrl = `https://files.rcsb.org/download/${pdbId.toLowerCase()}.cif`;
+        const response = await fetch(rcsbUrl);
+
+        if (response.ok) {
+          const structureData = await response.text();
+          if (structureData.includes('data_') || structureData.includes('_entry.id')) {
+            debugLog('mmCIF structure loaded from RCSB direct');
+            const model = viewer.addModel(structureData, 'cif');
+            if (model) {
+              processLoadedStructure(viewer);
             } else {
-              throw new Error('Invalid mmCIF data received');
+              throw new Error('Failed to parse mmCIF data from RCSB');
             }
           } else {
-            throw new Error(`API returned ${response.status}: ${response.statusText}`);
+            throw new Error('Invalid mmCIF data from RCSB');
           }
-        } catch (apiError) {
-          debugLog('Local API failed, trying RCSB mmCIF direct:', apiError);
-
-          // Fallback to RCSB direct mmCIF
-          const rcsbUrl = `https://files.rcsb.org/download/${pdbId.toLowerCase()}.cif`;
-
-          try {
-            const response = await fetch(rcsbUrl);
-            if (response.ok) {
-              const structureData = await response.text();
-              if (structureData.includes('data_') || structureData.includes('_entry.id')) {
-                debugLog('mmCIF structure loaded from RCSB direct');
-                const model = viewer.addModel(structureData, 'cif');
-                if (model) {
-                  processLoadedStructure(viewer, structureData);
-                } else {
-                  throw new Error('Failed to parse mmCIF data from RCSB');
-                }
-              } else {
-                throw new Error('Invalid mmCIF data from RCSB');
-              }
-            } else {
-              throw new Error(`RCSB returned ${response.status}: ${response.statusText}`);
-            }
-          } catch (rcsbError) {
-            handleError(`Failed to load structure ${pdbId} from all sources: ${rcsbError}`);
-          }
+        } else {
+          throw new Error(`RCSB returned ${response.status}: ${response.statusText}`);
         }
-
-      } catch (error) {
-        handleError(`Error initializing 3DMol.js: ${error instanceof Error ? error.message : String(error)}`);
+      } catch (rcsbError) {
+        handleError(`Failed to load structure ${pdbId} from all sources: ${rcsbError}`);
       }
-    };
+    }
+  };
 
-    // Process loaded structure - FOCUS ON PROTEIN CHAIN
-    const processLoadedStructure = (viewer: any, mmcifData?: string) => {
+  const processLoadedStructure = (viewer: any) => {
+    try {
+      debugLog('Processing loaded structure');
+
+      structureInfoRef.current = analyzeStructure(viewer, chainId);
+      if (!structureInfoRef.current) {
+        throw new Error('Could not analyze structure - no protein chains found');
+      }
+
+      applyDomainStyling(viewer);
+
+      const targetChain = structureInfoRef.current.actualChain;
+      debugLog(`Focusing on protein chain: ${targetChain}`);
+
       try {
-        debugLog('Processing loaded mmCIF structure');
-
-        // Analyze the structure to understand residue numbering and find correct protein chain
-        structureInfoRef.current = analyzeStructure(viewer, chainId, mmcifData);
-
-        if (!structureInfoRef.current) {
-          throw new Error('Could not analyze structure - no protein chains found');
-        }
-
-        // Apply domain styling (protein chain only)
-        applyDomainStyling(viewer);
-
-        // Focus on the correct protein chain ONLY
-        const targetChain = structureInfoRef.current.actualChain;
-        debugLog(`Focusing on protein chain: ${targetChain} (type: ${structureInfoRef.current.chainType})`);
-
-        try {
-          viewer.zoomTo({chain: targetChain});
-        } catch (e) {
-          debugLog('Error zooming to chain, using default zoom:', e);
-          viewer.zoomTo();
-        }
-
-        // Update loading state
-        setIsLoading(false);
-        loadedRef.current = true;
-
-        // Call onStructureLoaded callback
-        if (onStructureLoaded) {
-          try {
-            onStructureLoaded();
-          } catch (callbackError) {
-            debugLog('Error in onStructureLoaded callback:', callbackError);
-          }
-        }
-      } catch (processingError) {
-        handleError(`Error processing structure: ${processingError instanceof Error ? processingError.message : String(processingError)}`);
+        viewer.zoomTo({ chain: targetChain });
+      } catch (e) {
+        debugLog('Error zooming to chain, using default zoom:', e);
+        viewer.zoomTo();
       }
-    };
 
-    // Start initialization
-    init3DMol();
+      setIsLoading(false);
+      loadedRef.current = true;
+      onStructureLoaded?.();
 
-    // Cleanup function
+    } catch (processingError) {
+      handleError(`Error processing structure: ${processingError instanceof Error ? processingError.message : String(processingError)}`);
+    }
+  };
+
+  // =============================================================================
+  // EFFECTS
+  // =============================================================================
+
+  useEffect(() => {
+    initializeViewer();
+
     return () => {
       if (viewerRef.current) {
         try {
@@ -594,10 +771,8 @@ const ThreeDMolViewer = forwardRef<any, ThreeDMolViewerProps>(({
     };
   }, [pdbId, backgroundColor, chainId]);
 
-  // Update domain styling when domains or chainId change
   useEffect(() => {
     if (viewerRef.current && loadedRef.current) {
-      // Check if domains actually changed
       const prevDomains = lastAppliedDomainsRef.current;
       const domainsChanged = domains.length !== prevDomains.length ||
         domains.some((d, i) => {
@@ -613,146 +788,238 @@ const ThreeDMolViewer = forwardRef<any, ThreeDMolViewerProps>(({
         applyDomainStyling(viewerRef.current);
       }
     }
-  }, [domains, chainId, showControls]);
+  }, [domains, chainId]);
+
+  // =============================================================================
+  // RENDER
+  // =============================================================================
 
   return (
     <div
       ref={containerRef}
-      id={`3dmol-viewer-${pdbId}-${Date.now()}`} // Unique ID to prevent conflicts
-      className={`three-dmol-viewer ${className}`}
+      id={`3dmol-viewer-${pdbId}-${Date.now()}`}
+      className={`three-dmol-viewer relative ${className}`}
       style={{
-        position: 'relative',
         width,
         height,
         ...style
       }}
     >
+      {/* Loading overlay */}
       {showLoading && isLoading && (
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: 'rgba(255, 255, 255, 0.7)',
-          zIndex: 10
-        }}>
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '10px'
-          }}>
-            <div style={{
-              border: '4px solid rgba(0, 0, 0, 0.1)',
-              borderTopColor: '#3498db',
-              borderRadius: '50%',
-              width: '40px',
-              height: '40px',
-              animation: 'spin 1s linear infinite'
-            }} />
-            <div>Loading structure...</div>
-            {chainId && <div style={{ fontSize: '12px', color: '#666' }}>Chain {chainId}</div>}
-
-            <style jsx>{`
-              @keyframes spin {
-                to { transform: rotate(360deg); }
-              }
-            `}</style>
+        <div className="absolute inset-0 bg-white bg-opacity-90 flex items-center justify-center z-10">
+          <div className="text-center">
+            <LoadingSpinner size="lg" className="mx-auto mb-4" />
+            <div className="text-lg font-medium text-gray-700">Loading Structure</div>
+            <div className="text-sm text-gray-500 mt-1">
+              {pdbId} {chainId ? `• Chain ${chainId}` : ''}
+            </div>
+            <div className="text-xs text-gray-400 mt-2">
+              Fetching from RCSB PDB...
+            </div>
           </div>
         </div>
       )}
 
+      {/* Error overlay */}
       {errorMessage && (
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: 'rgba(255, 255, 255, 0.9)',
-          color: '#e74c3c',
-          zIndex: 20,
-          padding: '20px'
-        }}>
-          <div style={{
-            maxWidth: '80%',
-            textAlign: 'center'
-          }}>
-            <div style={{ fontWeight: 'bold', marginBottom: '10px' }}>Error</div>
-            <div>{errorMessage}</div>
-            {chainId && (
-              <div style={{ fontSize: '12px', marginTop: '10px', color: '#666' }}>
-                Target chain: {chainId}
+        <div className="absolute inset-0 bg-red-50 bg-opacity-95 flex items-center justify-center z-20">
+          <Card className="max-w-md p-6">
+            <div className="text-center">
+              <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-red-800 mb-2">Structure Loading Error</h3>
+              <p className="text-sm text-red-700 mb-2">{chainId && `Chain ${chainId}: `}{errorMessage}</p>
+              <div className="mt-4 space-y-2">
+                <Button
+                  onClick={() => {
+                    setIsLoading(true);
+                    setErrorMessage(null);
+                    initializeViewer();
+                  }}
+                  variant="destructive"
+                  size="sm"
+                  className="w-full"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Try Again
+                </Button>
+                <Button
+                  onClick={() => window.open(`https://www.rcsb.org/structure/${pdbId}`, '_blank')}
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                >
+                  <ExternalLink className="w-4 h-4 mr-2" />
+                  View in RCSB PDB
+                </Button>
               </div>
-            )}
-          </div>
+            </div>
+          </Card>
         </div>
       )}
 
+      {/* Controls */}
       {showControls && (
-        <div style={{
-          position: 'absolute',
-          top: '10px',
-          left: '10px',
-          zIndex: 10,
-          display: 'flex',
-          gap: '5px'
-        }}>
-          <button
-            onClick={() => {
-              if (viewerRef.current) {
-                const targetChain = structureInfoRef.current?.actualChain || chainId;
-                if (targetChain) {
-                  viewerRef.current.zoomTo({chain: targetChain});
-                } else {
-                  viewerRef.current.zoomTo();
+        <div className="absolute top-2 left-2 z-10 flex gap-1">
+          <Tooltip content="Reset view">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                if (viewerRef.current && structureInfoRef.current) {
+                  viewerRef.current.zoomTo({ chain: structureInfoRef.current.actualChain });
+                  viewerRef.current.render();
                 }
-                viewerRef.current.render();
-              }
-            }}
-            style={{
-              background: 'rgba(255, 255, 255, 0.8)',
-              border: '1px solid #ddd',
-              borderRadius: '4px',
-              padding: '5px 10px',
-              cursor: 'pointer',
-              fontSize: '12px'
-            }}
-          >
-            Reset View
-          </button>
-          <button
-            onClick={() => {
-              if (viewerRef.current) {
-                const dataUrl = viewerRef.current.pngURI();
-                const link = document.createElement('a');
-                link.href = dataUrl;
-                link.download = `${pdbId}${chainId ? '_' + chainId : ''}.png`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-              }
-            }}
-            style={{
-              background: 'rgba(255, 255, 255, 0.8)',
-              border: '1px solid #ddd',
-              borderRadius: '4px',
-              padding: '5px 10px',
-              cursor: 'pointer',
-              fontSize: '12px'
-            }}
-          >
-            Screenshot
-          </button>
+              }}
+              disabled={!loadedRef.current}
+            >
+              <RotateCcw className="w-4 h-4" />
+            </Button>
+          </Tooltip>
+
+          <Tooltip content="Zoom in">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                if (viewerRef.current) {
+                  viewerRef.current.zoom(1.2);
+                  viewerRef.current.render();
+                }
+              }}
+              disabled={!loadedRef.current}
+            >
+              <ZoomIn className="w-4 h-4" />
+            </Button>
+          </Tooltip>
+
+          <Tooltip content="Zoom out">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                if (viewerRef.current) {
+                  viewerRef.current.zoom(0.8);
+                  viewerRef.current.render();
+                }
+              }}
+              disabled={!loadedRef.current}
+            >
+              <ZoomOut className="w-4 h-4" />
+            </Button>
+          </Tooltip>
+
+          <Tooltip content="Export image">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                if (viewerRef.current) {
+                  const dataUrl = viewerRef.current.pngURI();
+                  const link = document.createElement('a');
+                  link.href = dataUrl;
+                  link.download = `${pdbId}${chainId ? '_' + chainId : ''}.png`;
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                }
+              }}
+              disabled={!loadedRef.current}
+            >
+              <Camera className="w-4 h-4" />
+            </Button>
+          </Tooltip>
+
+          <Tooltip content="Settings">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowSettings(!showSettings)}
+            >
+              <Settings className="w-4 h-4" />
+            </Button>
+          </Tooltip>
         </div>
       )}
+
+      {/* Settings panel */}
+      {showSettings && (
+        <div className="absolute top-12 left-2 z-10 w-64">
+          <Card className="p-3">
+            <h4 className="font-medium mb-3 text-sm">Viewer Settings</h4>
+            <div className="space-y-2">
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Style</label>
+                <select
+                  value={currentViewerOptions.style}
+                  onChange={(e) => {
+                    const newOptions = { ...currentViewerOptions, style: e.target.value };
+                    setCurrentViewerOptions(newOptions);
+                    if (viewerRef.current) {
+                      applyDomainStyling(viewerRef.current);
+                    }
+                  }}
+                  className="w-full text-xs border border-gray-300 rounded px-2 py-1"
+                >
+                  <option value="cartoon">Cartoon</option>
+                  <option value="stick">Stick</option>
+                  <option value="sphere">Sphere</option>
+                  <option value="line">Line</option>
+                </select>
+              </div>
+
+              <label className="flex items-center text-xs">
+                <input
+                  type="checkbox"
+                  checked={currentViewerOptions.showSideChains}
+                  onChange={(e) => {
+                    const newOptions = { ...currentViewerOptions, showSideChains: e.target.checked };
+                    setCurrentViewerOptions(newOptions);
+                  }}
+                  className="mr-2"
+                />
+                Show side chains
+              </label>
+
+              <label className="flex items-center text-xs">
+                <input
+                  type="checkbox"
+                  checked={currentViewerOptions.showLigands}
+                  onChange={(e) => {
+                    const newOptions = { ...currentViewerOptions, showLigands: e.target.checked };
+                    setCurrentViewerOptions(newOptions);
+                  }}
+                  className="mr-2"
+                />
+                Show ligands
+              </label>
+
+              <label className="flex items-center text-xs">
+                <input
+                  type="checkbox"
+                  checked={currentViewerOptions.showLabels}
+                  onChange={(e) => {
+                    const newOptions = { ...currentViewerOptions, showLabels: e.target.checked };
+                    setCurrentViewerOptions(newOptions);
+                  }}
+                  className="mr-2"
+                />
+                Show labels
+              </label>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Status indicator */}
+      <div className="absolute bottom-2 right-2 z-10">
+        <Badge
+          variant={loadedRef.current ? 'default' : isLoading ? 'secondary' : 'destructive'}
+          className="text-xs"
+        >
+          {loadedRef.current ? '✓ Loaded' : isLoading ? '⏳ Loading' : '✗ Error'}
+        </Badge>
+      </div>
     </div>
   );
 });

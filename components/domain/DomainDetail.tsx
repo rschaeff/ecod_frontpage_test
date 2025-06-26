@@ -86,7 +86,7 @@ interface DomainData {
   description: string;    // Human-readable description
   classification: DomainClassification;
   protein: Protein;       // Parent protein info
-  representativeFor: string; // F-group or empty string if not representative
+  representativeFor: string | null; // F-group or empty string if not representative
   similar: SimilarDomain[];  // Similar domains
   pfam: PfamMapping[];    // Pfam mappings
   ligands: Ligand[];      // Bound ligands
@@ -350,7 +350,7 @@ export default function DomainDetail({ params }: DomainPageParams) {
           resolution: "2.1Å",
           method: "X-ray diffraction"
         },
-        representativeFor: domainNum === 1 ? "1.1.1.1.1" : "",  // Fixed: use empty string instead of null
+        representativeFor: domainNum === 1 ? "1.1.1.1.1" : null,  // Fixed: use empty string instead of null
         similar: [
           {
             id: domainNum === 1 ? "e1cdcA1" : "e1cdcA2",

@@ -3,12 +3,11 @@
 
 import React, { useState, useRef, useEffect } from 'react'
 import dynamic from 'next/dynamic'
-import { Card } from '@/components/ui/Card'
-import { Button } from '@/components/ui/Button'
-import { DataTable } from '@/components/common/DataTable'
-import { LoadingSpinner } from '@/components/common/LoadingSpinner'
-import { Badge } from '@/components/ui/Badge'
-import { Tooltip } from '@/components/ui/Tooltip'
+
+import DataTable from '@/components/ui/DataTable';
+import LoadingState from '@/components/ui/LoadingState';
+import ErrorState from '@/components/ui/ErrorState';
+
 import {
   RotateCcw,
   Download,

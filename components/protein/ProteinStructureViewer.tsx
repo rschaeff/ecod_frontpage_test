@@ -80,7 +80,12 @@ const ProteinStructureViewer = forwardRef<ProteinStructureViewerRef, ProteinStru
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Refs
-  const threeDMolViewerRef = useRef<any>(null);
+    const threeDMolViewerRef = useRef<{
+      reset: () => void;
+      exportImage: () => string | null;
+      highlightDomain: (index: number) => void;
+      zoomToDomain: (index: number) => void;
+    } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Update local options when parent options change

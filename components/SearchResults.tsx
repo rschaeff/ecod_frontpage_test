@@ -121,14 +121,13 @@ export default function SearchResults({ className = '' }: SearchResultsProps) {
                             <h4 className="font-mono text-lg font-semibold text-blue-600">
                               {domain.id}
                             </h4>
-                            {/* Proper property access now that interface is updated */}
-                            {domain.isRepresentative && (
+                            {domain.isRepresentative === true && (
                               <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">
                                 Representative
                               </span>
                             )}
-                            {domain.isManual && (
-                              <span className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded">
+                            {domain.isManual === true && (
+                              <span className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded ml-1">
                                 Manual
                               </span>
                             )}
