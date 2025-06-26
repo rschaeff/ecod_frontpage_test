@@ -396,19 +396,21 @@ export default function ProteinViewWithId({ params }: ProteinPageParams) {
                     length: protein.length,
                     sequence: protein.sequence,
                     domains: protein.domains.map(d => ({
-                      id: d.id,
-                      range: d.range,
-                      rangeStart: d.rangeStart,
-                      rangeEnd: d.rangeEnd,
-                      ecod: {
-                        xgroup: d.ecod.xgroup,
-                        hgroup: d.ecod.hgroup,
-                        tgroup: d.ecod.tgroup,
-                        fgroup: d.ecod.fgroup
-                      },
-                      color: d.color,
-                      description: d.description
-                    })),
+                    id: d.id,
+                    range: d.range,
+                    rangeStart: d.rangeStart,
+                    rangeEnd: d.rangeEnd,
+                    chainId: d.chainId,  // Added missing chainId property
+                    ecod: {
+                      architecture: d.ecod.architecture,  // Added missing architecture
+                      xgroup: d.ecod.xgroup,
+                      hgroup: d.ecod.hgroup,
+                      tgroup: d.ecod.tgroup,
+                      fgroup: d.ecod.fgroup
+                    },
+                    color: d.color,
+                    description: d.description
+                  })),
                     resolution: protein.resolution || '',
                     method: protein.method,
                     releaseDate: protein.releaseDate
