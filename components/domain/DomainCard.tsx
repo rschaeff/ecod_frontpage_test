@@ -1,4 +1,6 @@
-// Create components/domain/DomainCard.tsx
+// components/domain/DomainCard.tsx
+import Link from 'next/link';
+
 interface DomainCardProps {
   domain: {
     id: string;
@@ -18,9 +20,11 @@ export default function DomainCard({
   onClick
 }: DomainCardProps) {
   return (
-    <div 
-      className={`border rounded-md p-3 transition-all ${
-        isHighlighted ? 'border-gray-500 bg-gray-50 shadow-sm' : 'border-gray-200'
+    <div
+      className={`border rounded-md p-3 transition-all cursor-pointer ${
+        isHighlighted
+          ? 'border-gray-500 bg-gray-50 shadow-sm'
+          : 'border-gray-200 hover:border-gray-300'
       }`}
       onMouseEnter={() => onHover && onHover(domain.id)}
       onMouseLeave={() => onHover && onHover(null)}
@@ -33,7 +37,7 @@ export default function DomainCard({
             <span>Residues: {domain.range}</span>
           </div>
         </div>
-        
+
         {domain.similarity !== undefined && (
           <div className="text-right">
             <div className="font-medium text-green-700">
@@ -47,8 +51,8 @@ export default function DomainCard({
             </div>
           </div>
         )}
-        
-        <Link 
+
+        <Link
           href={`/domain/${domain.id}`}
           className="ml-3 px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-sm hover:bg-blue-100"
           onClick={e => e.stopPropagation()}
