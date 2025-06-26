@@ -61,8 +61,8 @@ export interface ViewerOptions {
   style: 'cartoon' | 'ball-and-stick' | 'surface' | 'spacefill';
   showSideChains: boolean;
   showLigands: boolean;
-  showLabels: boolean;
-  zoom: number;
+  showLabels?: boolean;  // Optional for compatibility
+  zoom?: number;         // Optional for compatibility
 }
 
 // Route parsing utility

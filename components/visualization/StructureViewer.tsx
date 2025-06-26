@@ -34,6 +34,36 @@ const DOMAIN_COLORS = [
   '#FF6600', '#9900CC', '#669900', '#FF99CC', '#666666', '#336699'
 ]
 
+const Button: React.FC<{
+  size?: 'sm' | 'md' | 'lg';
+  variant?: 'default' | 'outline' | 'destructive';
+  disabled?: boolean;
+  onClick?: () => void;
+  children: React.ReactNode;
+}> = ({ size = 'md', variant = 'default', disabled = false, onClick, children }) => {
+  const baseClasses = 'rounded font-medium transition-colors';
+  const sizeClasses = {
+    sm: 'px-2 py-1 text-sm',
+    md: 'px-4 py-2',
+    lg: 'px-6 py-3 text-lg'
+  };
+  const variantClasses = {
+    default: 'bg-blue-600 text-white hover:bg-blue-700',
+    outline: 'border border-gray-300 text-gray-700 hover:bg-gray-50',
+    destructive: 'bg-red-600 text-white hover:bg-red-700'
+  };
+
+  return (
+    <button
+      className={`${baseClasses} ${sizeClasses[size]} ${variantClasses[variant]} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+      onClick={onClick}
+      disabled={disabled}
+    >
+      {children}
+    </button>
+  );
+};
+
 interface PdbValidation {
   exists: boolean
   accessible: boolean

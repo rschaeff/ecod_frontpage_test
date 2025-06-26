@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { convertDomainFormat, ThreeDMolDomain, ProteinDomain } from '@/types/protein';
+import { convertDomainFormat, ThreeDMolDomain, ProteinDomain, ViewerOptions } from '@/types/protein';
 
 // Dynamic import for 3DMol viewer
 const ThreeDMolViewer = dynamic(
@@ -90,15 +90,6 @@ interface DomainData {
   similar: SimilarDomain[];  // Similar domains
   pfam: PfamMapping[];    // Pfam mappings
   ligands: Ligand[];      // Bound ligands
-}
-
-interface ViewerOptions {
-  style: 'cartoon' | 'ball-and-stick' | 'surface' | 'spacefill';
-  colorScheme: 'chain' | 'secondary-structure' | 'residue-type' | 'hydrophobicity';
-  showSideChains: boolean;
-  showLigands: boolean;
-  showWater: boolean;
-  quality: 'low' | 'medium' | 'high';
 }
 
 interface DomainPageParams {
