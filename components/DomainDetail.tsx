@@ -350,7 +350,7 @@ export default function DomainDetail({ params }: DomainPageParams) {
           resolution: "2.1Å",
           method: "X-ray diffraction"
         },
-        representativeFor: domainNum === 1 ? "F.1.1.1.1.1" : null,
+        representativeFor: domainNum === 1 ? "F.1.1.1.1.1" : "",
         similar: [
           {
             id: domainNum === 1 ? "e1cdcA1" : "e1cdcA2",
