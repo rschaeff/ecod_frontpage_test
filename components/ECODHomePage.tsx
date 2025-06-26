@@ -655,6 +655,8 @@ useEffect(() => {
           </div>
         </div>
       </section>
+    {/* Search Results - Show when there are results */}
+      <SearchResults />
     </AppLayout>
   );
 }
