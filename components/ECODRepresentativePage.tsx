@@ -112,6 +112,9 @@ interface RepresentativePageProps {
   domainId: string;
 }
 
+// Define section keys type for better type safety
+type SectionKey = 'domain-info' | 'curation-notes' | 'experimental-dist';
+
 export default function ECODRepresentativePage({ domainId }: RepresentativePageProps) {
   // State for loading and domain data
   const [loading, setLoading] = useState<boolean>(true);
@@ -129,7 +132,7 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
 
   // UI state for tabs and filters
   const [activeTab, setActiveTab] = useState<'overview' | 'children' | 'taxonomy' | 'length'>('overview');
-  const [expandedSections, setExpandedSections] = useState<{[key: string]: boolean}>({
+  const [expandedSections, setExpandedSections] = useState<Record<SectionKey, boolean>>({
     'domain-info': true,
     'curation-notes': true,
     'experimental-dist': false
@@ -257,7 +260,7 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
   };
 
   // Toggle section expansion
-  const toggleSection = (section: string) => {
+  const toggleSection = (section: SectionKey) => {
     setExpandedSections(prev => ({
       ...prev,
       [section]: !prev[section]
@@ -533,12 +536,12 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
                           <div className="font-medium">PDB ID:</div>
                           <div className="col-span-2">
                             <a
-                              href={`https://www.rcsb.org/structure/${domain.pdbId}`}
+                              href={`https://www.rcsb.org/structure/${domain.structureId}`}
                               target="_blank"
                               rel="noreferrer"
                               className="text-blue-600 hover:underline"
                             >
-                              {domain.pdbId}
+                              {domain.structureId}
                             </a>
                           </div>
                         </div>
@@ -769,7 +772,7 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
                             type="checkbox"
                             className="mr-1"
                             checked={childDomainsFilters.showExperimental}
-                            onChange={(e) => handleFilterChange({ showExperimental: e.target.checked })}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFilterChange({ showExperimental: e.target.checked })}
                           />
                           <span>Experimental</span>
                         </label>
@@ -779,7 +782,7 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
                             type="checkbox"
                             className="mr-1"
                             checked={childDomainsFilters.showTheoretical}
-                            onChange={(e) => handleFilterChange({ showTheoretical: e.target.checked })}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFilterChange({ showTheoretical: e.target.checked })}
                           />
                           <span>Theoretical</span>
                         </label>
@@ -788,7 +791,7 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
                       <select
                         className="border text-sm rounded px-2 py-1"
                         value={childDomainsFilters.taxonomyFilter}
-                        onChange={(e) => handleFilterChange({ taxonomyFilter: e.target.value })}
+                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleFilterChange({ taxonomyFilter: e.target.value })}
                       >
                         <option value="all">All taxa</option>
                         <option value="bacteria">Bacteria</option>
@@ -799,7 +802,7 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
                       <select
                         className="border text-sm rounded px-2 py-1"
                         value={itemsPerPage}
-                        onChange={(e) => {
+                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                           setItemsPerPage(Number(e.target.value));
                           setCurrentPage(1);
                         }}
@@ -1008,8 +1011,8 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
                     <div className="flex-1 flex items-center justify-between">
                       <div className="text-sm text-gray-700">
                         Showing <span className="font-medium">{indexOfFirstItem + 1}</span> to <span className="font-medium">
-                          {Math.min(indexOfFirstItem + itemsPerPage, filteredDomains.length)}
-                        </span> of <span className="font-medium">{filteredDomains.length}</span> domains
+                          {Math.min(indexOfFirstItem + itemsPerPage, associatedDomainsTotal)}
+                        </span> of <span className="font-medium">{associatedDomainsTotal}</span> domains
                       </div>
                       <div className="flex space-x-1">
                         <button
@@ -1078,7 +1081,7 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
               </div>
             </div>
           )}
-          
+
           {/* Taxonomy and Length tabs would go here - simplified for brevity */}
           {activeTab === 'taxonomy' && (
             <div className="bg-white rounded-lg shadow-md p-6">
@@ -1086,7 +1089,7 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
               <p className="text-gray-600">Taxonomy distribution visualization and breakdown would be displayed here.</p>
             </div>
           )}
-          
+
           {activeTab === 'length' && (
             <div className="bg-white rounded-lg shadow-md p-6">
               <h3 className="text-lg font-medium mb-4">Length Distribution</h3>
