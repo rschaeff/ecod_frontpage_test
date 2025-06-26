@@ -48,6 +48,10 @@ interface ProteinStructureViewerRef {
   zoomToDomain: (domainIndex: number) => void;
   isLoaded: () => boolean;
   getViewer: () => any;
+  reload: () => void;
+  updateStyle: (options: any) => void;
+  zoomIn: () => void;
+  zoomOut: () => void;
 }
 
 const ProteinStructureViewer = forwardRef<ProteinStructureViewerRef, ProteinStructureViewerProps>(({
@@ -80,12 +84,7 @@ const ProteinStructureViewer = forwardRef<ProteinStructureViewerRef, ProteinStru
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Refs
-    const threeDMolViewerRef = useRef<{
-      reset: () => void;
-      exportImage: () => string | null;
-      highlightDomain: (index: number) => void;
-      zoomToDomain: (index: number) => void;
-    } | null>(null);
+  const threeDMolViewerRef = useRef<ProteinStructureViewerRef | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Update local options when parent options change
@@ -195,51 +194,50 @@ const ProteinStructureViewer = forwardRef<ProteinStructureViewerRef, ProteinStru
   };
 
   // Handle viewer option changes
-  const handleViewerOptionChange = (option: keyof ViewerOptions, value: any) => {
-    const newOptions = { ...localViewerOptions, [option]: value };
-    setLocalViewerOptions(newOptions);
+    const handleViewerOptionChange = (option: keyof ViewerOptions, value: any) => {
+      const newOptions = { ...localViewerOptions, [option]: value };
+      setLocalViewerOptions(newOptions);
 
-    if (onViewerOptionsChange) {
-      onViewerOptionsChange(newOptions);
-    }
+      if (onViewerOptionsChange) {
+        onViewerOptionsChange(newOptions);
+      }
 
-    // Apply changes to 3DMol viewer if available
-    if (structureLoaded && threeDMolViewerRef.current && threeDMolViewerRef.current.updateStyle) {
-      threeDMolViewerRef.current.updateStyle(newOptions);
-    }
-  };
+      // Apply changes to 3DMol viewer if available - SAFE CALL
+      if (structureLoaded && threeDMolViewerRef.current && threeDMolViewerRef.current.updateStyle) {
+        threeDMolViewerRef.current.updateStyle(newOptions);
+      }
+    };
 
   // Control functions
-  const handleReset = () => {
-    if (threeDMolViewerRef.current && threeDMolViewerRef.current.reset) {
-      threeDMolViewerRef.current.reset();
-    }
-  };
-
-  const handleZoomIn = () => {
-    if (threeDMolViewerRef.current && threeDMolViewerRef.current.zoomIn) {
-      threeDMolViewerRef.current.zoomIn();
-    }
-  };
-
-  const handleZoomOut = () => {
-    if (threeDMolViewerRef.current && threeDMolViewerRef.current.zoomOut) {
-      threeDMolViewerRef.current.zoomOut();
-    }
-  };
-
-  const handleExportImage = () => {
-    if (threeDMolViewerRef.current && threeDMolViewerRef.current.exportImage) {
-      const imageData = threeDMolViewerRef.current.exportImage();
-      if (imageData) {
-        // Create download link
-        const link = document.createElement('a');
-        link.download = `${protein.id}_structure.png`;
-        link.href = imageData;
-        link.click();
+    const handleReset = () => {
+      if (threeDMolViewerRef.current?.reset) {
+        threeDMolViewerRef.current.reset();
       }
-    }
-  };
+    };
+
+    const handleZoomIn = () => {
+      if (threeDMolViewerRef.current?.zoomIn) {
+        threeDMolViewerRef.current.zoomIn();
+      }
+    };
+
+    const handleZoomOut = () => {
+      if (threeDMolViewerRef.current?.zoomOut) {
+        threeDMolViewerRef.current.zoomOut();
+      }
+    };
+
+    const handleExportImage = () => {
+      if (threeDMolViewerRef.current?.exportImage) {
+        const imageData = threeDMolViewerRef.current.exportImage();
+        if (imageData) {
+          const link = document.createElement('a');
+          link.download = `${protein.id}_structure.png`;
+          link.href = imageData;
+          link.click();
+        }
+      }
+    };
 
   const toggleFullscreen = () => {
     if (!isFullscreen && containerRef.current) {
@@ -266,27 +264,39 @@ const ProteinStructureViewer = forwardRef<ProteinStructureViewerRef, ProteinStru
   }, []);
 
   // Expose methods via ref
-  useImperativeHandle(ref, () => ({
-    reset: handleReset,
-    exportImage: () => {
-      if (threeDMolViewerRef.current && threeDMolViewerRef.current.exportImage) {
-        return threeDMolViewerRef.current.exportImage();
-      }
-      return null;
-    },
-    highlightDomain: (domainIndex: number) => {
-      if (threeDMolViewerRef.current && threeDMolViewerRef.current.highlightDomain) {
-        threeDMolViewerRef.current.highlightDomain(domainIndex);
-      }
-    },
-    zoomToDomain: (domainIndex: number) => {
-      if (threeDMolViewerRef.current && threeDMolViewerRef.current.zoomToDomain) {
-        threeDMolViewerRef.current.zoomToDomain(domainIndex);
-      }
-    },
-    isLoaded: () => structureLoaded,
-    getViewer: () => threeDMolViewerRef.current
-  }));
+    useImperativeHandle(ref, () => ({
+      reset: handleReset,
+      exportImage: () => {
+        if (threeDMolViewerRef.current?.exportImage) {
+          return threeDMolViewerRef.current.exportImage();
+        }
+        return null;
+      },
+      highlightDomain: (domainIndex: number) => {
+        if (threeDMolViewerRef.current?.highlightDomain) {
+          threeDMolViewerRef.current.highlightDomain(domainIndex);
+        }
+      },
+      zoomToDomain: (domainIndex: number) => {
+        if (threeDMolViewerRef.current?.zoomToDomain) {
+          threeDMolViewerRef.current.zoomToDomain(domainIndex);
+        }
+      },
+      isLoaded: () => structureLoaded,
+      getViewer: () => threeDMolViewerRef.current?.getViewer?.() || null,
+      reload: () => {
+        if (threeDMolViewerRef.current?.reload) {
+          threeDMolViewerRef.current.reload();
+        }
+      },
+      updateStyle: (options: any) => {
+        if (threeDMolViewerRef.current?.updateStyle) {
+          threeDMolViewerRef.current.updateStyle(options);
+        }
+      },
+      zoomIn: handleZoomIn,
+      zoomOut: handleZoomOut
+    }));
 
   return (
     <div ref={containerRef} className={`relative bg-white rounded-lg shadow-md overflow-hidden ${className}`}>
