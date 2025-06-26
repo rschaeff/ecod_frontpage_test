@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ProteinData } from '@/types/protein';
+import { ProteinChain } from '@/types/protein';
 
 interface ProteinDomainMapProps {
   protein: ProteinData;
