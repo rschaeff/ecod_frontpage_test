@@ -56,14 +56,78 @@ export interface ThreeDMolDomain {
   };
 }
 
-// Viewer options for structure visualization
+// 3dmol.js style types
+export type MolecularStyle =
+  | 'cartoon'
+  | 'stick'
+  | 'sphere'
+  | 'line'
+  | 'surface'
+  | 'cross'
+  | 'ball-and-stick';  // Alias for stick in some contexts
+
+// 3dmol.js color scheme types
+export type ColorScheme =
+  | 'chain'           // Color by chain
+  | 'element'         // Color by element type
+  | 'rainbow'         // Rainbow along chain
+  | 'spectrum'        // Spectrum coloring
+  | 'hydrophobicity'  // Color by hydrophobicity
+  | 'sslength'        // Secondary structure length
+  | 'sstype'          // Secondary structure type
+  | 'white'           // All white
+  | 'gray'            // All gray
+  | string;           // Custom hex color
+
+// Surface quality for 3dmol.js
+export type SurfaceQuality = 'low' | 'medium' | 'high';
+
+// Updated ViewerOptions interface based on 3dmol.js capabilities
 export interface ViewerOptions {
-  style: 'cartoon' | 'ball-and-stick' | 'surface' | 'spacefill';
-  showSideChains: boolean;
-  showLigands: boolean;
-  showLabels?: boolean;  // Optional for compatibility
-  zoom?: number;         // Optional for compatibility
+  // Rendering style
+  style: MolecularStyle;
+
+  // Color scheme
+  colorScheme?: ColorScheme;
+
+  // Display toggles
+  showSideChains?: boolean;
+  showLigands?: boolean;
+  showLabels?: boolean;
+  showWater?: boolean;
+  showHydrogens?: boolean;
+
+  // Surface/quality options
+  quality?: SurfaceQuality;
+
+  // View controls
+  zoom?: number;
+  opacity?: number;
+
+  // Advanced options
+  wireframe?: boolean;
+  showBoundingBox?: boolean;
+
+  // Background
+  backgroundColor?: string;
 }
+
+// Default viewer options
+export const defaultViewerOptions: ViewerOptions = {
+  style: 'cartoon',
+  colorScheme: 'chain',
+  showSideChains: false,
+  showLigands: true,
+  showLabels: false,
+  showWater: false,
+  showHydrogens: false,
+  quality: 'medium',
+  zoom: 1,
+  opacity: 1,
+  wireframe: false,
+  showBoundingBox: false,
+  backgroundColor: '#ffffff'
+};
 
 // Route parsing utility
 export function parseProteinId(routeId: string): { pdbId: string; chainId: string } {
@@ -111,6 +175,14 @@ export function convertDomainFormat(domain: ProteinDomain): ThreeDMolDomain {
       x_group: domain.ecod.xgroup,
       a_group: domain.ecod.architecture
     }
+  };
+}
+
+// Helper function to validate viewer options
+export function validateViewerOptions(options: Partial<ViewerOptions>): ViewerOptions {
+  return {
+    ...defaultViewerOptions,
+    ...options
   };
 }
 

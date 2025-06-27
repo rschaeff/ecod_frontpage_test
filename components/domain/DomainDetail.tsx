@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { convertDomainFormat, ThreeDMolDomain, ProteinDomain, ViewerOptions } from '@/types/protein';
+import { convertDomainFormat, ThreeDMolDomain, ProteinDomain, ViewerOptions, defaultViewerOptions, validateViewerOptions } from '@/types/protein';
 
 // Dynamic import for 3DMol viewer
 const ThreeDMolViewer = dynamic(
@@ -267,14 +267,14 @@ export default function DomainDetail({ params }: DomainPageParams) {
   const [highlightedPosition, setHighlightedPosition] = useState<number | null>(null);
   const [structureLoaded, setStructureLoaded] = useState<boolean>(false);
   const [structureError, setStructureError] = useState<string | null>(null);
-  const [viewerOptions, setViewerOptions] = useState<ViewerOptions>({
+  const [viewerOptions, setViewerOptions] = useState<ViewerOptions>(validateViewerOptions({
     style: 'cartoon',
     colorScheme: 'chain',
     showSideChains: false,
     showLigands: true,
     showWater: false,
     quality: 'medium'
-  });
+  }));
 
   // Refs for components
   const structureViewerRef = useRef<any>(null);
@@ -419,14 +419,7 @@ export default function DomainDetail({ params }: DomainPageParams) {
 
   // Reset viewer options to defaults
   const resetViewerOptions = () => {
-    setViewerOptions({
-      style: 'cartoon',
-      colorScheme: 'chain',
-      showSideChains: false,
-      showLigands: true,
-      showWater: false,
-      quality: 'medium'
-    });
+    setViewerOptions(defaultViewerOptions);
   };
 
   // Create breadcrumb items
@@ -594,12 +587,13 @@ export default function DomainDetail({ params }: DomainPageParams) {
                     <select
                       className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
                       value={viewerOptions.style}
-                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => updateViewerOptions({ style: e.target.value as any })}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => updateViewerOptions({ style: e.target.value as ViewerOptions['style'] })}
                     >
                       <option value="cartoon">Cartoon</option>
-                      <option value="ball-and-stick">Ball and Stick</option>
+                      <option value="stick">Stick</option>
+                      <option value="sphere">Sphere</option>
+                      <option value="line">Line</option>
                       <option value="surface">Surface</option>
-                      <option value="spacefill">Space Fill</option>
                     </select>
                   </div>
 
@@ -607,7 +601,7 @@ export default function DomainDetail({ params }: DomainPageParams) {
                     <input
                       type="checkbox"
                       id="showSideChains"
-                      checked={viewerOptions.showSideChains}
+                      checked={viewerOptions.showSideChains || false}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateViewerOptions({ showSideChains: e.target.checked })}
                       className="mr-2"
                     />
@@ -618,11 +612,22 @@ export default function DomainDetail({ params }: DomainPageParams) {
                     <input
                       type="checkbox"
                       id="showLigands"
-                      checked={viewerOptions.showLigands}
+                      checked={viewerOptions.showLigands || false}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateViewerOptions({ showLigands: e.target.checked })}
                       className="mr-2"
                     />
                     <label htmlFor="showLigands" className="text-sm text-gray-700">Show Ligands</label>
+                  </div>
+
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="showWater"
+                      checked={viewerOptions.showWater || false}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateViewerOptions({ showWater: e.target.checked })}
+                      className="mr-2"
+                    />
+                    <label htmlFor="showWater" className="text-sm text-gray-700">Show Water</label>
                   </div>
 
                   <button
@@ -782,6 +787,7 @@ export default function DomainDetail({ params }: DomainPageParams) {
                     onError={handleStructureError}
                     showControls={true}
                     showLoading={true}
+                    viewerOptions={viewerOptions}
                   />
 
                   {/* Error overlay */}
