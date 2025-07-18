@@ -1,67 +1,49 @@
-// Create components/ui/Tooltip.tsx
-import React, { useState, useRef } from 'react';
+// Create components/ui/Button.tsx
+import React from 'react';
 
-interface TooltipProps {
-  content: React.ReactNode;
+interface ButtonProps {
+  size?: 'sm' | 'md' | 'lg';
+  variant?: 'default' | 'outline' | 'destructive';
+  disabled?: boolean;
+  onClick?: () => void;
   children: React.ReactNode;
-  position?: 'top' | 'bottom' | 'left' | 'right';
   className?: string;
+  type?: 'button' | 'submit' | 'reset';
 }
 
-export default function Tooltip({ 
-  content, 
-  children, 
-  position = 'top',
-  className = '' 
-}: TooltipProps) {
-  const [isVisible, setIsVisible] = useState(false);
-  const timeoutRef = useRef<NodeJS.Timeout>();
+export default function Button({
+  size = 'md',
+  variant = 'default',
+  disabled = false,
+  onClick,
+  children,
+  className = '',
+  type = 'button'
+}: ButtonProps) {
+  const baseClasses = 'inline-flex items-center justify-center rounded font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2';
 
-  const handleMouseEnter = () => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
-    setIsVisible(true);
+  const sizeClasses = {
+    sm: 'px-2 py-1 text-sm',
+    md: 'px-4 py-2',
+    lg: 'px-6 py-3 text-lg'
   };
 
-  const handleMouseLeave = () => {
-    timeoutRef.current = setTimeout(() => {
-      setIsVisible(false);
-    }, 100);
+  const variantClasses = {
+    default: 'bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-300',
+    outline: 'border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:text-gray-400 disabled:hover:bg-white',
+    destructive: 'bg-red-600 text-white hover:bg-red-700 disabled:bg-red-300'
   };
 
-  const positionClasses = {
-    top: 'bottom-full left-1/2 transform -translate-x-1/2 mb-2',
-    bottom: 'top-full left-1/2 transform -translate-x-1/2 mt-2',
-    left: 'right-full top-1/2 transform -translate-y-1/2 mr-2',
-    right: 'left-full top-1/2 transform -translate-y-1/2 ml-2'
-  };
-
-  const arrowClasses = {
-    top: 'top-full left-1/2 transform -translate-x-1/2 border-l-transparent border-r-transparent border-b-transparent border-t-gray-900',
-    bottom: 'bottom-full left-1/2 transform -translate-x-1/2 border-l-transparent border-r-transparent border-t-transparent border-b-gray-900',
-    left: 'left-full top-1/2 transform -translate-y-1/2 border-t-transparent border-b-transparent border-r-transparent border-l-gray-900',
-    right: 'right-full top-1/2 transform -translate-y-1/2 border-t-transparent border-b-transparent border-l-transparent border-r-gray-900'
-  };
+  const disabledClasses = disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer';
 
   return (
-    <div 
-      className={`relative inline-block ${className}`}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
+    <button
+      type={type}
+      className={`${baseClasses} ${sizeClasses[size]} ${variantClasses[variant]} ${disabledClasses} ${className}`}
+      onClick={onClick}
+      disabled={disabled}
     >
       {children}
-      
-      {isVisible && (
-        <div className={`absolute z-50 ${positionClasses[position]}`}>
-          <div className="bg-gray-900 text-white text-sm rounded px-2 py-1 whitespace-nowrap max-w-xs">
-            {content}
-          </div>
-          <div 
-            className={`absolute w-0 h-0 border-4 ${arrowClasses[position]}`}
-          />
-        </div>
-      )}
-    </div>
+    </button>
   );
 }
