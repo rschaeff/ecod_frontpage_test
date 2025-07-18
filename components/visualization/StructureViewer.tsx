@@ -8,6 +8,7 @@ import DataTable from '@/components/ui/DataTable';
 import LoadingState from '@/components/ui/LoadingState';
 import ErrorState from '@/components/ui/ErrorState';
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import Badge from '@/components/ui/Badge'
 
 import {
   RotateCcw,
