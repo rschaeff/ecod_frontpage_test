@@ -3,7 +3,7 @@ import React, { useState, useRef } from 'react';
 
 interface TooltipProps {
   content: React.ReactNode;
-  children: React.ReactNode;
+  children: React.ReactElement;
   position?: 'top' | 'bottom' | 'left' | 'right';
   className?: string;
 }
