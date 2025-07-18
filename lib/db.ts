@@ -31,7 +31,7 @@ export async function query<T = any>(
 ): Promise<QueryResult<T>> {
   try {
     const start = Date.now();
-    const result: PgQueryResult<T> = await pool.query(text, params);
+    const result = await pool.query(text, params);
     const duration = Date.now() - start;
 
     if (process.env.NODE_ENV !== 'production') {
