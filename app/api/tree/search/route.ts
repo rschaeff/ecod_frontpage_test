@@ -1,25 +1,26 @@
-// app/api/tree/search/route.ts - Compatible with existing frontend
+// app/api/tree/search/route.ts - Fixed complete implementation
 
 import { NextRequest, NextResponse } from 'next/server'
+import { query as dbQuery } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   try {
     // Use NextRequest.nextUrl.searchParams instead of request.url
     const searchParams = request.nextUrl.searchParams
-    const query = searchParams.get('q')
+    const searchQuery = searchParams.get('q')
     const type = searchParams.get('type')
 
-    console.log('Search query:', query, 'type:', type)
+    console.log('Search query:', searchQuery, 'type:', type)
 
-    if (!query) {
+    if (!searchQuery) {
       return NextResponse.json(
-        { error: 'Search query parameter (query) is required' },
+        { error: 'Search query parameter (q) is required' },
         { status: 400 }
       );
     }
 
     // Search classification nodes - focused on tree browsing
-    const searchQuery = `
+    const sqlQuery = `
       SELECT
         id,
         name,
@@ -49,14 +50,14 @@ export async function GET(request: NextRequest) {
       LIMIT 20
     `;
 
-    const searchPattern = `%${query}%`;
-    const prefixPattern = `${query}%`;
+    const searchPattern = `%${searchQuery}%`;
+    const prefixPattern = `${searchQuery}%`;
 
-    const searchResult = await query(searchQuery, [searchPattern, q, prefixPattern]);
+    const searchResult = await dbQuery(sqlQuery, [searchPattern, searchQuery, prefixPattern]);
 
     // Return in the format the frontend expects
     const results = {
-      query: q,
+      query: searchQuery,
       results: searchResult.rows.map(node => ({
         id: node.id,
         name: node.name,
@@ -71,7 +72,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Search error:', error)
     return NextResponse.json(
-      { success: false, error: 'Search failed' },
+      { error: 'Search failed', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     )
   }
