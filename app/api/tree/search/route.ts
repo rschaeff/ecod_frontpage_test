@@ -11,9 +11,9 @@ export async function GET(request: NextRequest) {
 
     console.log('Search query:', query, 'type:', type)
 
-    if (!q) {
+    if (!query) {
       return NextResponse.json(
-        { error: 'Search query parameter (q) is required' },
+        { error: 'Search query parameter (query) is required' },
         { status: 400 }
       );
     }
