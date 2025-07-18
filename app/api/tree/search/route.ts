@@ -49,8 +49,8 @@ export async function GET(request: NextRequest) {
       LIMIT 20
     `;
 
-    const searchPattern = `%${q}%`;
-    const prefixPattern = `${q}%`;
+    const searchPattern = `%${query}%`;
+    const prefixPattern = `${query}%`;
 
     const searchResult = await query(searchQuery, [searchPattern, q, prefixPattern]);
 
