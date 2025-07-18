@@ -1,14 +1,15 @@
 // app/api/tree/search/route.ts - Compatible with existing frontend
 
-import { NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { NextRequest, NextResponse } from 'next/server'
 
-export const dynamic = 'force-dynamic  '
-
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const q = searchParams.get('q');
+    // Use NextRequest.nextUrl.searchParams instead of request.url
+    const searchParams = request.nextUrl.searchParams
+    const query = searchParams.get('q')
+    const type = searchParams.get('type')
+
+    console.log('Search query:', query, 'type:', type)
 
     if (!q) {
       return NextResponse.json(
@@ -68,13 +69,10 @@ export async function GET(request: Request) {
     return NextResponse.json(results);
 
   } catch (error) {
-    console.error('Tree search error:', error);
+    console.error('Search error:', error)
     return NextResponse.json(
-      {
-        error: 'Failed to perform tree search',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
+      { success: false, error: 'Search failed' },
       { status: 500 }
-    );
+    )
   }
 }
