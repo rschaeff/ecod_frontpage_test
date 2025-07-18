@@ -9,6 +9,9 @@ import LoadingState from '@/components/ui/LoadingState';
 import ErrorState from '@/components/ui/ErrorState';
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import Badge from '@/components/ui/Badge'
+import Card from '@/components/ui/Card'
+import Tooltip from '@/components/ui/Tooltip'
+
 
 import {
   RotateCcw,
@@ -36,35 +39,6 @@ const DOMAIN_COLORS = [
   '#FF6600', '#9900CC', '#669900', '#FF99CC', '#666666', '#336699'
 ]
 
-const Button: React.FC<{
-  size?: 'sm' | 'md' | 'lg';
-  variant?: 'default' | 'outline' | 'destructive';
-  disabled?: boolean;
-  onClick?: () => void;
-  children: React.ReactNode;
-}> = ({ size = 'md', variant = 'default', disabled = false, onClick, children }) => {
-  const baseClasses = 'rounded font-medium transition-colors';
-  const sizeClasses = {
-    sm: 'px-2 py-1 text-sm',
-    md: 'px-4 py-2',
-    lg: 'px-6 py-3 text-lg'
-  };
-  const variantClasses = {
-    default: 'bg-blue-600 text-white hover:bg-blue-700',
-    outline: 'border border-gray-300 text-gray-700 hover:bg-gray-50',
-    destructive: 'bg-red-600 text-white hover:bg-red-700'
-  };
-
-  return (
-    <button
-      className={`${baseClasses} ${sizeClasses[size]} ${variantClasses[variant]} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-      onClick={onClick}
-      disabled={disabled}
-    >
-      {children}
-    </button>
-  );
-};
 
 interface PdbValidation {
   exists: boolean
@@ -722,7 +696,7 @@ const filesystemColumns = [
           </div>
 
           <a
-            href={`https://www.rcsb.org/structure/${pdbId}`}
+            href={`https://www.rcsb.org/structure/${pdb_id}`}
             target="_blank"
             rel="noopener noreferrer"
             className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
@@ -731,7 +705,7 @@ const filesystemColumns = [
           </a>
 
           <a
-            href={`/api/pdb/${pdbId.toLowerCase()}`}
+            href={`/api/pdb/${pdb_id.toLowerCase()}`}
             target="_blank"
             rel="noopener noreferrer"
             className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
