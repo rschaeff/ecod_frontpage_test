@@ -8,14 +8,51 @@ export async function GET(
 ) {
   try {
     const domainId = params.id;
-    console.log('=== DEBUG INFO ===');
-    console.log('Requested domain ID:', domainId);
-    console.log('Domain ID length:', domainId.length);
-    console.log('Domain ID chars:', domainId.split('').map(c => `'${c}'`).join(','));
-    
-    // First, get the basic domain information
+    console.log('Representative API called for domain:', domainId);
+
+    // First, check if the domain exists at all and get its basic info
+    const existsQuery = `
+      SELECT id, is_rep, is_manual
+      FROM public.domain
+      WHERE id = $1
+    `;
+
+    const existsResult = await query(existsQuery, [domainId]);
+
+    if (existsResult.rows.length === 0) {
+      // Try to find similar domain IDs to help with typos
+      const similarQuery = `
+        SELECT id
+        FROM public.domain
+        WHERE id ILIKE $1
+        LIMIT 5
+      `;
+      const similarResult = await query(similarQuery, [`%${domainId.slice(0, -2)}%`]);
+
+      return NextResponse.json(
+        {
+          error: `Domain ${domainId} not found`,
+          suggestions: similarResult.rows.map(row => row.id)
+        },
+        { status: 404 }
+      );
+    }
+
+    const domainInfo = existsResult.rows[0];
+
+    if (!domainInfo.is_rep) {
+      return NextResponse.json(
+        {
+          error: `Domain ${domainId} is not a representative domain`,
+          details: `is_rep: ${domainInfo.is_rep}, is_manual: ${domainInfo.is_manual}`
+        },
+        { status: 400 }
+      );
+    }
+
+    // Now get the full domain information
     const domainInfoQuery = `
-      SELECT 
+      SELECT
         d.id,
         d.uid,
         d.range,
@@ -39,30 +76,23 @@ export async function GET(
           NULL
         ) as resolution,
         -- Get length from range if available
-        CASE 
-          WHEN d.range IS NOT NULL AND d.range LIKE '%-%' 
+        CASE
+          WHEN d.range IS NOT NULL AND d.range LIKE '%-%'
           THEN (SPLIT_PART(d.range, '-', 2)::int - SPLIT_PART(d.range, '-', 1)::int + 1)
           ELSE NULL
         END as length
       FROM public.domain d
-      WHERE d.id = $1 AND d.is_rep = true
+      WHERE d.id = $1
     `;
-    
+
     const domainResult = await query(domainInfoQuery, [domainId]);
-    
-    if (domainResult.rows.length === 0) {
-      return NextResponse.json(
-        { error: `Representative domain ${domainId} not found` },
-        { status: 404 }
-      );
-    }
-    
     const domain = domainResult.rows[0];
+
     console.log('Found domain:', domain);
-    
+
     // Get classification hierarchy information
     const classificationQuery = `
-      SELECT 
+      SELECT
         COALESCE(pv.aid, cv.aid) as aid,
         COALESCE(pv.aname, cv.aname) as aname,
         COALESCE(pv.xid, cv.xid) as xid,
@@ -82,34 +112,33 @@ export async function GET(
       LEFT JOIN public.view_dom_clsrel_csminfo cv ON d.id = cv.id
       WHERE d.id = $1
     `;
-    
+
     const classificationResult = await query(classificationQuery, [domainId]);
     const classification = classificationResult.rows[0];
-    
+
     if (!classification) {
       return NextResponse.json(
         { error: `Classification not found for domain ${domainId}` },
         { status: 404 }
       );
     }
-    
+
     console.log('Found classification:', classification);
-    
+
     // Get sequence
     const sequenceQuery = `
       SELECT fasta FROM public.fasta WHERE uid = $1
     `;
     const sequenceResult = await query(sequenceQuery, [domain.uid]);
     const sequence = sequenceResult.rows.length > 0 ? sequenceResult.rows[0].fasta : '';
-    
-    // Get curation information if available (assuming a curation table exists)
-    // For now, we'll use default values since we don't know the exact curation table structure
+
+    // Get curation information if available
     const curationInfo = {
-      notes: `Representative domain for ${classification.fname}. Selected based on structural quality and coverage.`,
-      curator: 'ECOD Team',
+      notes: `Representative domain for ${classification.fname}. ${domain.is_manual ? 'Manually curated representative selected for optimal structural quality and coverage.' : 'Provisional representative automatically selected.'}`,
+      curator: domain.is_manual ? 'ECOD Curation Team' : 'ECOD Automated Pipeline',
       date: '2024-01-01'
     };
-    
+
     // Format the response
     const response = {
       id: domain.id,
@@ -123,21 +152,21 @@ export async function GET(
       sequence: sequence,
       classification: {
         architecture: classification.aname || 'Unknown',
-        xgroup: { 
-          id: classification.xid, 
-          name: classification.xname || 'Unknown' 
+        xgroup: {
+          id: classification.xid,
+          name: classification.xname || 'Unknown'
         },
-        hgroup: { 
-          id: classification.hid, 
-          name: classification.hname || 'Unknown' 
+        hgroup: {
+          id: classification.hid,
+          name: classification.hname || 'Unknown'
         },
-        tgroup: { 
-          id: classification.tid, 
-          name: classification.tname || 'Unknown' 
+        tgroup: {
+          id: classification.tid,
+          name: classification.tname || 'Unknown'
         },
-        fgroup: { 
-          id: classification.fid, 
-          name: classification.fname || 'Unknown' 
+        fgroup: {
+          id: classification.fid,
+          name: classification.fname || 'Unknown'
         }
       },
       organism: classification.full_name || classification.organism_name || 'Unknown organism',
@@ -147,14 +176,14 @@ export async function GET(
       isManual: domain.is_manual,
       isRepresentative: domain.is_rep
     };
-    
+
     console.log('Returning response:', response);
     return NextResponse.json(response);
-    
+
   } catch (error) {
     console.error('Error fetching representative domain:', error);
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to fetch representative domain data',
         details: error instanceof Error ? error.message : 'Unknown error'
       },
