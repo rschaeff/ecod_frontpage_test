@@ -8,7 +8,10 @@ export async function GET(
 ) {
   try {
     const domainId = params.id;
-    console.log('Representative API called for domain:', domainId);
+    console.log('=== DEBUG INFO ===');
+    console.log('Requested domain ID:', domainId);
+    console.log('Domain ID length:', domainId.length);
+    console.log('Domain ID chars:', domainId.split('').map(c => `'${c}'`).join(','));
     
     // First, get the basic domain information
     const domainInfoQuery = `
