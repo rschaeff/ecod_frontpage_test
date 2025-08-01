@@ -78,10 +78,23 @@ export async function GET(
           ELSE 'Unknown'
         END as method,
         NULL as resolution,
-        -- Get length from range if available
+        -- Get length from range (handle discontinuous ranges like "A:1-100,A:150-200")
         CASE
-          WHEN d.range IS NOT NULL AND d.range LIKE '%-%'
-          THEN (SPLIT_PART(d.range, '-', 2)::int - SPLIT_PART(d.range, '-', 1)::int + 1)
+          WHEN d.range IS NOT NULL AND d.range LIKE '%-%' THEN
+            (
+              SELECT SUM(
+                CASE
+                  WHEN segment LIKE '%:%' THEN
+                    -- Segment has chain prefix (e.g., "A:175-332")
+                    (SPLIT_PART(SPLIT_PART(segment, ':', 2), '-', 2)::int - SPLIT_PART(SPLIT_PART(segment, ':', 2), '-', 1)::int + 1)
+                  ELSE
+                    -- Segment has no chain prefix (e.g., "175-332")
+                    (SPLIT_PART(segment, '-', 2)::int - SPLIT_PART(segment, '-', 1)::int + 1)
+                END
+              )
+              FROM unnest(string_to_array(d.range, ',')) AS segment
+              WHERE segment LIKE '%-%'
+            )
           ELSE NULL
         END as length
       FROM public.domain d
