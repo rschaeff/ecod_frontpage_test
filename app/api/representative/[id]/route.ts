@@ -120,7 +120,7 @@ export async function GET(
         COALESCE(pv.unp_acc, cv.unp_acc, cn.unp_acc) as unp_acc,
         COALESCE(pv.name, cv.name, cn.name) as organism_name,
         COALESCE(pv.full_name, cv.full_name, cn.full_name) as full_name,
-        COALESCE(pv.pfam_acc, cv.pfam_acc, cn.pfam_acc) as pfam_acc
+        COALESCE(pv.pfam_acc, cv.pfam_acc) as pfam_acc
       FROM public.domain d
       LEFT JOIN public.view_dom_clsrel_pdbinfo pv ON d.id = pv.id
       LEFT JOIN public.view_dom_clsrel_csminfo cv ON d.id = cv.id
