@@ -61,20 +61,23 @@ export async function GET(
         d.is_rep,
         COALESCE(
           (SELECT pd.pdb_id FROM view_dom_clsrel_pdbinfo pd WHERE pd.id = d.id),
-          (SELECT cd.source_id FROM view_dom_clsrel_csminfo cd WHERE cd.id = d.id)
+          (SELECT cn.source_id FROM view_dom_clsrel_clsname cn WHERE cn.id = d.id),
+          'Unknown'
         ) as structure_id,
         COALESCE(
           (SELECT pd.chain_str FROM view_dom_clsrel_pdbinfo pd WHERE pd.id = d.id),
-          NULL
+          (SELECT cn.chain_id FROM view_dom_clsrel_clsname cn WHERE cn.id = d.id),
+          'A'
         ) as chain_str,
-        COALESCE(
-          (SELECT pd.method FROM view_dom_clsrel_pdbinfo pd WHERE pd.id = d.id),
-          'Theoretical model'
-        ) as method,
-        COALESCE(
-          (SELECT pd.resolution FROM view_dom_clsrel_pdbinfo pd WHERE pd.id = d.id),
-          NULL
-        ) as resolution,
+        -- Method and resolution are not available in the views, using defaults
+        CASE
+          WHEN (SELECT pd.id FROM view_dom_clsrel_pdbinfo pd WHERE pd.id = d.id) IS NOT NULL
+          THEN 'X-ray crystallography'
+          WHEN (SELECT cd.id FROM view_dom_clsrel_csminfo cd WHERE cd.id = d.id) IS NOT NULL
+          THEN 'Theoretical model'
+          ELSE 'Unknown'
+        END as method,
+        NULL as resolution,
         -- Get length from range if available
         CASE
           WHEN d.range IS NOT NULL AND d.range LIKE '%-%'
@@ -93,23 +96,22 @@ export async function GET(
     // Get classification hierarchy information
     const classificationQuery = `
       SELECT
-        COALESCE(pv.aid, cv.aid) as aid,
-        COALESCE(pv.aname, cv.aname) as aname,
-        COALESCE(pv.xid, cv.xid) as xid,
-        COALESCE(pv.xname, cv.xname) as xname,
-        COALESCE(pv.hid, cv.hid) as hid,
-        COALESCE(pv.hname, cv.hname) as hname,
-        COALESCE(pv.tid, cv.tid) as tid,
-        COALESCE(pv.tname, cv.tname) as tname,
-        COALESCE(pv.fid, cv.fid) as fid,
-        COALESCE(pv.fname, cv.fname) as fname,
-        COALESCE(pv.unp_acc, cv.unp_acc) as unp_acc,
-        COALESCE(pv.name, cv.name) as organism_name,
-        COALESCE(pv.full_name, cv.full_name) as full_name,
-        COALESCE(pv.pfam_acc, cv.pfam_acc) as pfam_acc
+        COALESCE(pv.xid, cv.xid, cn.xid) as xid,
+        COALESCE(pv.xname, cv.xname, cn.xname) as xname,
+        COALESCE(pv.hid, cv.hid, cn.hid) as hid,
+        COALESCE(pv.hname, cv.hname, cn.hname) as hname,
+        COALESCE(pv.tid, cv.tid, cn.tid) as tid,
+        COALESCE(pv.tname, cv.tname, cn.tname) as tname,
+        COALESCE(pv.fid, cv.fid, cn.fid) as fid,
+        COALESCE(pv.fname, cv.fname, cn.fname) as fname,
+        COALESCE(pv.unp_acc, cv.unp_acc, cn.unp_acc) as unp_acc,
+        COALESCE(pv.name, cv.name, cn.name) as organism_name,
+        COALESCE(pv.full_name, cv.full_name, cn.full_name) as full_name,
+        COALESCE(pv.pfam_acc, cv.pfam_acc, cn.pfam_acc) as pfam_acc
       FROM public.domain d
       LEFT JOIN public.view_dom_clsrel_pdbinfo pv ON d.id = pv.id
       LEFT JOIN public.view_dom_clsrel_csminfo cv ON d.id = cv.id
+      LEFT JOIN public.view_dom_clsrel_clsname cn ON d.id = cn.id
       WHERE d.id = $1
     `;
 
@@ -151,7 +153,7 @@ export async function GET(
       length: domain.length || (sequence ? sequence.length : 0),
       sequence: sequence,
       classification: {
-        architecture: classification.aname || 'Unknown',
+        architecture: 'Unknown', // Architecture level not available in views
         xgroup: {
           id: classification.xid,
           name: classification.xname || 'Unknown'
