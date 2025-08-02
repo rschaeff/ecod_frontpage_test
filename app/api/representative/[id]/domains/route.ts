@@ -26,28 +26,29 @@ export async function GET(
     // First, get the F-group ID for this representative domain
     const fgroupQuery = `
       SELECT 
-        COALESCE(pv.fid, cv.fid) as fid
+        COALESCE(pv.fid, cv.fid, cn.fid) as fid
       FROM public.domain d
       LEFT JOIN public.view_dom_clsrel_pdbinfo pv ON d.id = pv.id
       LEFT JOIN public.view_dom_clsrel_csminfo cv ON d.id = cv.id
+      LEFT JOIN public.view_dom_clsrel_clsname cn ON d.id = cn.id
       WHERE d.id = $1
     `;
-    
+
     const fgroupResult = await query(fgroupQuery, [domainId]);
-    
+
     if (fgroupResult.rows.length === 0) {
       return NextResponse.json(
         { error: `Representative domain ${domainId} not found` },
         { status: 404 }
       );
     }
-    
+
     const fgroupId = fgroupResult.rows[0].fid;
     console.log('Found F-group:', fgroupId);
-    
+
     // Build the base query for associated domains
     let baseQuery = `
-      SELECT 
+      SELECT
         id,
         range,
         type,
@@ -55,37 +56,50 @@ export async function GET(
         is_rep,
         pdb_id,
         chain_str,
-        method,
-        resolution,
+        'X-ray crystallography' as method,
+        NULL as resolution,
         unp_acc,
         name as organism_name,
         full_name,
         gene_name,
         'pdb' as source_type,
         -- Calculate similarity (simplified - in reality you'd have sequence similarity data)
-        CASE 
+        CASE
           WHEN id = $1 THEN 100
           WHEN is_rep = true THEN 95 + (RANDOM() * 5)::int
           ELSE 60 + (RANDOM() * 35)::int
         END as similarity,
-        -- Get length from range
-        CASE 
-          WHEN range IS NOT NULL AND range LIKE '%-%' 
-          THEN (SPLIT_PART(range, '-', 2)::int - SPLIT_PART(range, '-', 1)::int + 1)
+        -- Get length from range (handle discontinuous ranges like "A:1-100,A:150-200")
+        CASE
+          WHEN range IS NOT NULL AND range LIKE '%-%' THEN
+            (
+              SELECT SUM(
+                CASE
+                  WHEN segment LIKE '%:%' THEN
+                    -- Segment has chain prefix (e.g., "A:175-332")
+                    (SPLIT_PART(SPLIT_PART(segment, ':', 2), '-', 2)::int - SPLIT_PART(SPLIT_PART(segment, ':', 2), '-', 1)::int + 1)
+                  ELSE
+                    -- Segment has no chain prefix (e.g., "175-332")
+                    (SPLIT_PART(segment, '-', 2)::int - SPLIT_PART(segment, '-', 1)::int + 1)
+                END
+              )
+              FROM unnest(string_to_array(range, ',')) AS segment
+              WHERE segment LIKE '%-%'
+            )
           ELSE NULL
         END as length
       FROM public.view_dom_clsrel_pdbinfo
       WHERE fid = $2
-      
+
       UNION ALL
-      
-      SELECT 
+
+      SELECT
         id,
         range,
         type,
         is_manual,
         is_rep,
-        source_id as pdb_id,
+        NULL as pdb_id,
         NULL as chain_str,
         'Theoretical model' as method,
         NULL as resolution,
@@ -95,25 +109,36 @@ export async function GET(
         gene_name,
         'csm' as source_type,
         -- Calculate similarity
-        CASE 
+        CASE
           WHEN id = $1 THEN 100
           WHEN is_rep = true THEN 95 + (RANDOM() * 5)::int
           ELSE 60 + (RANDOM() * 35)::int
         END as similarity,
-        -- Get length from range
-        CASE 
-          WHEN range IS NOT NULL AND range LIKE '%-%' 
-          THEN (SPLIT_PART(range, '-', 2)::int - SPLIT_PART(range, '-', 1)::int + 1)
+        -- Get length from range (handle discontinuous ranges)
+        CASE
+          WHEN range IS NOT NULL AND range LIKE '%-%' THEN
+            (
+              SELECT SUM(
+                CASE
+                  WHEN segment LIKE '%:%' THEN
+                    (SPLIT_PART(SPLIT_PART(segment, ':', 2), '-', 2)::int - SPLIT_PART(SPLIT_PART(segment, ':', 2), '-', 1)::int + 1)
+                  ELSE
+                    (SPLIT_PART(segment, '-', 2)::int - SPLIT_PART(segment, '-', 1)::int + 1)
+                END
+              )
+              FROM unnest(string_to_array(range, ',')) AS segment
+              WHERE segment LIKE '%-%'
+            )
           ELSE NULL
         END as length
       FROM public.view_dom_clsrel_csminfo
       WHERE fid = $2
     `;
-    
+
     // Add filters
     const conditions = [];
     const queryParams = [domainId, fgroupId];
-    
+
     // Type filters
     if (!showExperimental || !showTheoretical) {
       if (showExperimental && !showTheoretical) {
@@ -122,7 +147,7 @@ export async function GET(
         conditions.push("source_type = 'csm'");
       }
     }
-    
+
     // Build the complete query with filtering
     let finalQuery = `
       WITH filtered_domains AS (
@@ -130,11 +155,11 @@ export async function GET(
       )
       SELECT * FROM filtered_domains
     `;
-    
+
     if (conditions.length > 0) {
       finalQuery += ` WHERE ${conditions.join(' AND ')}`;
     }
-    
+
     // Add sorting
     let orderClause = '';
     switch (sortBy) {
@@ -153,16 +178,16 @@ export async function GET(
       default:
         orderClause = 'ORDER BY similarity DESC';
     }
-    
+
     finalQuery += ` ${orderClause} LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`;
     queryParams.push(limit, offset);
-    
+
     console.log('Executing query:', finalQuery);
     console.log('Query params:', queryParams);
-    
+
     // Execute the main query
     const domainsResult = await query(finalQuery, queryParams);
-    
+
     // Get total count for pagination
     let countQuery = `
       WITH filtered_domains AS (
@@ -170,14 +195,14 @@ export async function GET(
       )
       SELECT COUNT(*) as total FROM filtered_domains
     `;
-    
+
     if (conditions.length > 0) {
       countQuery += ` WHERE ${conditions.join(' AND ')}`;
     }
-    
+
     const countResult = await query(countQuery, [domainId, fgroupId]);
     const totalCount = parseInt(countResult.rows[0].total);
-    
+
     // Format the response
     const domains = domainsResult.rows.map(domain => ({
       id: domain.id,
@@ -201,9 +226,9 @@ export async function GET(
         domain: domain.source_type === 'pdb' ? 'Eukaryota' : 'Unknown'
       }
     }));
-    
+
     console.log(`Returning ${domains.length} domains out of ${totalCount} total`);
-    
+
     return NextResponse.json({
       domains,
       pagination: {
@@ -220,11 +245,11 @@ export async function GET(
         sortOrder
       }
     });
-    
+
   } catch (error) {
     console.error('Error fetching associated domains:', error);
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to fetch associated domains',
         details: error instanceof Error ? error.message : 'Unknown error'
       },
