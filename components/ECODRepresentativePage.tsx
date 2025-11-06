@@ -443,6 +443,27 @@ export default function ECODRepresentativePage({ domainId }: RepresentativePageP
               </div>
             </div>
 
+            {/* Navigation links */}
+            <div className="mt-4 mb-4 flex flex-wrap gap-2">
+              <Link
+                href={`/domain/${domain.id}`}
+                className="inline-flex items-center bg-blue-50 hover:bg-blue-100 text-blue-700 px-4 py-2 rounded-md border border-blue-200 transition-colors text-sm"
+              >
+                <Database className="h-4 w-4 mr-2" />
+                <span>View domain page</span>
+                <ChevronRight className="h-4 w-4 ml-2" />
+              </Link>
+
+              <Link
+                href={`/protein/${domain.structureId}_${domain.chainId}`}
+                className="inline-flex items-center bg-green-50 hover:bg-green-100 text-green-700 px-4 py-2 rounded-md border border-green-200 transition-colors text-sm"
+              >
+                <ExternalLink className="h-4 w-4 mr-2" />
+                <span>View parent protein</span>
+                <ChevronRight className="h-4 w-4 ml-2" />
+              </Link>
+            </div>
+
             <div className="flex flex-wrap gap-2 mt-4">
               <span className="text-sm bg-blue-50 text-blue-700 px-3 py-1 rounded-full border border-blue-200">
                 {domain.classification.architecture}

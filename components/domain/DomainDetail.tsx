@@ -649,8 +649,8 @@ export default function DomainDetail({ params }: DomainPageParams) {
               </div>
             </div>
 
-            {/* Parent protein link */}
-            <div className="mt-2 mb-4">
+            {/* Navigation links */}
+            <div className="mt-2 mb-4 flex flex-wrap gap-2">
               <Link
                 href={`/protein/${domain.protein.id}`}
                 className="inline-flex items-center bg-blue-50 hover:bg-blue-100 text-blue-700 px-4 py-2 rounded-md border border-blue-200 transition-colors"
@@ -659,6 +659,17 @@ export default function DomainDetail({ params }: DomainPageParams) {
                 <span>View in context of full protein structure</span>
                 <ArrowRight className="h-4 w-4 ml-2" />
               </Link>
+
+              {domain.representativeFor && (
+                <Link
+                  href={`/representative/${domain.id}`}
+                  className="inline-flex items-center bg-green-50 hover:bg-green-100 text-green-700 px-4 py-2 rounded-md border border-green-200 transition-colors"
+                >
+                  <Database className="h-4 w-4 mr-2" />
+                  <span>View as representative domain</span>
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Link>
+              )}
             </div>
 
             <div className="flex flex-wrap gap-2 mt-4">

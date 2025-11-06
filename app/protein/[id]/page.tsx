@@ -595,16 +595,63 @@ export default function ProteinViewWithId({ params }: ProteinPageParams) {
                 <div className="bg-white rounded-lg shadow-md p-4">
                   <h3 className="font-medium mb-3">References</h3>
                   <div className="text-sm space-y-3">
+                    {(protein.pmid || protein.doi) && (
+                      <div className="flex">
+                        <BookOpen className="h-4 w-4 mr-2 text-gray-500 flex-shrink-0 mt-1" />
+                        <p className="text-gray-700">
+                          <span className="font-medium">Structure:</span> View the original publication{' '}
+                          {protein.doi && (
+                            <a
+                              href={`https://doi.org/${protein.doi}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:underline"
+                            >
+                              via DOI
+                            </a>
+                          )}
+                          {protein.doi && protein.pmid && ' or '}
+                          {protein.pmid && (
+                            <a
+                              href={`https://pubmed.ncbi.nlm.nih.gov/${protein.pmid}/`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:underline"
+                            >
+                              via PubMed
+                            </a>
+                          )}
+                        </p>
+                      </div>
+                    )}
+                    {!protein.pmid && !protein.doi && (
+                      <div className="flex">
+                        <BookOpen className="h-4 w-4 mr-2 text-gray-500 flex-shrink-0 mt-1" />
+                        <p className="text-gray-700">
+                          <span className="font-medium">Structure:</span> View details on{' '}
+                          <a
+                            href={`https://www.rcsb.org/structure/${protein.pdb_id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline"
+                          >
+                            RCSB PDB
+                          </a>
+                        </p>
+                      </div>
+                    )}
                     <div className="flex">
                       <BookOpen className="h-4 w-4 mr-2 text-gray-500 flex-shrink-0 mt-1" />
                       <p className="text-gray-700">
-                        <span className="font-medium">Structure:</span> Smith J, et al. (2023). "Crystal structure of {protein.name}." <a href="#" className="text-blue-600 hover:underline">J Mol Biol</a>
-                      </p>
-                    </div>
-                    <div className="flex">
-                      <BookOpen className="h-4 w-4 mr-2 text-gray-500 flex-shrink-0 mt-1" />
-                      <p className="text-gray-700">
-                        <span className="font-medium">Classification:</span> Cheng H, et al. (2014). "ECOD: An Evolutionary Classification of Protein Domains." <a href="#" className="text-blue-600 hover:underline">PLoS Comput Biol</a>
+                        <span className="font-medium">Classification:</span> Cheng H, et al. (2014). "ECOD: An Evolutionary Classification of Protein Domains."{' '}
+                        <a
+                          href="https://doi.org/10.1371/journal.pcbi.1003926"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:underline"
+                        >
+                          PLoS Comput Biol
+                        </a>
                       </p>
                     </div>
                   </div>
