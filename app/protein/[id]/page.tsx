@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import {
   Database, Search, Home, Download, HelpCircle, ExternalLink,
-  Menu, X, ChevronRight, Info, Eye, BookOpen
+  Menu, X, ChevronRight, Info, Eye, BookOpen, Share2
 } from 'lucide-react';
 import { ProteinChain, ProteinDomain, ViewerOptions, parseProteinId } from '@/types/protein';
 import ProteinStructureViewer from '@/components/protein/ProteinStructureViewer';
@@ -23,6 +23,7 @@ export default function ProteinViewWithId({ params }: ProteinPageParams) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   const [structureLoaded, setStructureLoaded] = useState<boolean>(false);
   const [structureError, setStructureError] = useState<string | null>(null);
+  const [showCitationModal, setShowCitationModal] = useState<boolean>(false);
 
   // Structure viewer options
   const [viewerOptions, setViewerOptions] = useState<ViewerOptions>({
@@ -38,81 +39,210 @@ export default function ProteinViewWithId({ params }: ProteinPageParams) {
 
   // Fetch protein data based on ID
   useEffect(() => {
-    setLoading(true);
+    const fetchProteinData = async () => {
+      setLoading(true);
+      setError(null);
 
-    // Parse the protein ID to get PDB ID and chain ID
-    const { pdbId, chainId } = parseProteinId(params.id);
-    console.log(`Parsed protein ID: ${params.id} -> PDB: ${pdbId}, Chain: ${chainId}`);
+      try {
+        // Call the real API endpoint
+        const response = await fetch(`/api/proteins/${params.id}`);
 
-    // In a real implementation, this would fetch data from your API
-    // For demo, let's simulate a delay and return corrected mock data
-    const timer = setTimeout(() => {
-      // Corrected mock data addressing the issues identified
-      const mockData: ProteinChain = {
-        pdbId: pdbId,
-        chainId: chainId,
-        id: `${pdbId}_${chainId}`,
-        entityId: 1,
-        uniprotId: "P20226",
-        name: pdbId === "4UBP" || pdbId === "2UUB" ?
-          "TATA-box-binding protein" :
-          `Protein ${pdbId}`,
-        organism: "Homo sapiens",
-        // CORRECTED: Use actual sequence length, not domain end position
-        length: 240,  // This should be the ACTUAL chain length
-        sequence: "MDQNNSLPPYAQGLASPQGAMTPGIPIFSPMMPYGTGLTPQPIQNTNSLSILEEQQRQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQAVAAAAVQQSTSQQATQGTSGQAPQLFHSQTLTTAPLPGTTPLYPSPMTPMTPITPATPASESSKVDNCSESYNEDNKTFPTEGIQTGAAAAAAAVSYLGYKFSVNQFCGVMNHDLNSKIILDRFSKEQSRLAARKYILGTTVKPHHRICQFKLGPKKFDENRNAVIPKSKIPEFLAQLTEDY",
-        domains: [
-          {
-            id: `e${pdbId.toLowerCase()}${chainId}1`,
-            range: "159-252",  // Chain-relative positions
-            rangeStart: 159,
-            rangeEnd: 252,
-            chainId: chainId,
+        if (!response.ok) {
+          if (response.status === 404) {
+            setError(`Protein ${params.id} not found`);
+          } else {
+            setError('Failed to load protein data');
+          }
+          setProtein(null);
+          setLoading(false);
+          return;
+        }
+
+        const apiData = await response.json();
+
+        // Parse the protein ID to get PDB ID and chain ID
+        const { pdbId, chainId } = parseProteinId(params.id);
+
+        // Get sequence from API if available (for now we'll need to fetch separately)
+        // TODO: Extend API to include sequence data
+        const sequenceResponse = await fetch(`/api/sequences/${apiData.pdb_id}_${apiData.chain_id || chainId}`).catch(() => null);
+        let sequence = '';
+
+        if (sequenceResponse && sequenceResponse.ok) {
+          const seqData = await sequenceResponse.json();
+          sequence = seqData.sequence || '';
+        }
+
+        // Calculate protein length from domains or sequence
+        const length = sequence.length ||
+          (apiData.domains.length > 0 ?
+            Math.max(...apiData.domains.map((d: any) => d.rangeEnd || 0)) : 0);
+
+        // Transform API response to component's expected format
+        const proteinData: ProteinChain = {
+          pdbId: apiData.pdb_id,
+          chainId: apiData.chain_id || chainId,
+          id: apiData.id,
+          entityId: 1,
+          uniprotId: apiData.uniprotId || '',
+          name: apiData.name || `Protein ${apiData.pdb_id}`,
+          organism: apiData.organism || 'Unknown organism',
+          length: length,
+          sequence: sequence,
+          domains: apiData.domains.map((d: any) => ({
+            id: d.id,
+            range: d.range,
+            rangeStart: d.rangeStart,
+            rangeEnd: d.rangeEnd,
+            chainId: apiData.chain_id || chainId,
             ecod: {
-              architecture: "Alpha proteins",
-              xgroup: "1.1",           // CORRECTED: No X. prefix
-              hgroup: "1.1.1",         // CORRECTED: No H. prefix
-              tgroup: "1.1.1.1",       // CORRECTED: No T. prefix
-              fgroup: "1.1.1.1.1"      // CORRECTED: No F. prefix
+              architecture: 'Unknown', // Not in current API response
+              xgroup: d.ecod.xgroup,
+              hgroup: d.ecod.hgroup,
+              tgroup: d.ecod.tgroup,
+              fgroup: d.ecod.fgroup
             },
-            color: "#4285F4",
-            description: "TATA-binding protein, N-terminal domain"
-          },
-          {
-            id: `e${pdbId.toLowerCase()}${chainId}2`,
-            range: "253-339",  // Chain-relative positions
-            rangeStart: 253,
-            rangeEnd: 339,
-            chainId: chainId,
-            ecod: {
-              architecture: "Alpha proteins",
-              xgroup: "1.1",           // CORRECTED: No X. prefix
-              hgroup: "1.1.1",         // CORRECTED: No H. prefix
-              tgroup: "1.1.1.1",       // CORRECTED: No T. prefix
-              fgroup: "1.1.1.1.2"      // CORRECTED: No F. prefix, different family
-            },
-            color: "#EA4335",
-            description: "TATA-binding protein, C-terminal domain"
-          },
-        ],
-        resolution: "2.1Å",
-        method: "X-ray diffraction",
-        releaseDate: "2023-06-15"
-      };
+            color: d.color,
+            description: d.description
+          })),
+          resolution: apiData.resolution ? `${apiData.resolution}Å` : 'N/A',
+          method: apiData.method || 'Unknown',
+          releaseDate: 'N/A' // Not available in current API
+        };
 
-      if (pdbId && chainId) {
-        setProtein(mockData);
+        setProtein(proteinData);
         setError(null);
-      } else {
-        setError("Invalid protein ID format");
+      } catch (err) {
+        console.error('Error fetching protein data:', err);
+        setError('Failed to load protein data');
         setProtein(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProteinData();
+  }, [params.id]);
+
+  // Download PDB structure
+  const handleDownloadPDB = async () => {
+    if (!protein) return;
+
+    try {
+      const response = await fetch(`/api/structures/${protein.pdbId}`);
+      if (!response.ok) {
+        console.error('Failed to download PDB structure');
+        return;
       }
 
-      setLoading(false);
-    }, 1000);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${protein.pdbId}.pdb`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Error downloading PDB structure:', error);
+    }
+  };
 
-    return () => clearTimeout(timer);
-  }, [params.id]);
+  // Download chain FASTA
+  const handleDownloadFasta = async () => {
+    if (!protein) return;
+
+    try {
+      const response = await fetch(`/api/sequences/${protein.id}?format=fasta`);
+      if (!response.ok) {
+        console.error('Failed to download FASTA');
+        return;
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${protein.id}.fasta`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Error downloading FASTA:', error);
+    }
+  };
+
+  // Download domain JSON
+  const handleDownloadDomainJSON = () => {
+    if (!protein) return;
+
+    const domainData = {
+      protein_id: protein.id,
+      pdb_id: protein.pdbId,
+      chain_id: protein.chainId,
+      name: protein.name,
+      organism: protein.organism,
+      length: protein.length,
+      domains: protein.domains.map(d => ({
+        id: d.id,
+        range: d.range,
+        ecod_classification: d.ecod,
+        description: d.description
+      }))
+    };
+
+    const dataStr = JSON.stringify(domainData, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${protein.id}_domains.json`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  };
+
+  // Generate citation text
+  const generateCitation = (format: 'bibtex' | 'apa' | 'mla') => {
+    if (!protein) return '';
+
+    const year = new Date().getFullYear();
+    const url = `https://prodata.swmed.edu/ecod/complete/protein/${protein.id}`;
+
+    switch (format) {
+      case 'bibtex':
+        return `@misc{ecod_${protein.id},
+  title = {ECOD Protein ${protein.id}: ${protein.name}},
+  author = {ECOD Consortium},
+  year = {${year}},
+  howpublished = {\\url{${url}}},
+  note = {Evolutionary Classification of Protein Domains}
+}`;
+
+      case 'apa':
+        return `ECOD Consortium. (${year}). ECOD Protein ${protein.id}: ${protein.name}. Retrieved from ${url}`;
+
+      case 'mla':
+        return `ECOD Consortium. "ECOD Protein ${protein.id}: ${protein.name}." ECOD Database, ${year}, ${url}.`;
+
+      default:
+        return '';
+    }
+  };
+
+  // Copy citation to clipboard
+  const copyCitation = async (format: 'bibtex' | 'apa' | 'mla') => {
+    const citation = generateCitation(format);
+    try {
+      await navigator.clipboard.writeText(citation);
+      alert(`${format.toUpperCase()} citation copied to clipboard!`);
+    } catch (error) {
+      console.error('Failed to copy citation:', error);
+    }
+  };
 
   // Handle domain hover
   const handleDomainHover = (domainId: string | null) => {
@@ -586,7 +716,10 @@ export default function ProteinViewWithId({ params }: ProteinPageParams) {
                   <div className="flex justify-between items-center mb-3">
                     <h3 className="text-lg font-medium">Chain {protein.chainId} Sequence</h3>
                     <div>
-                      <button className="bg-blue-50 hover:bg-blue-100 text-blue-600 px-3 py-1 rounded text-sm border border-blue-200">
+                      <button
+                        className="bg-blue-50 hover:bg-blue-100 text-blue-600 px-3 py-1 rounded text-sm border border-blue-200"
+                        onClick={handleDownloadFasta}
+                      >
                         <Download className="inline-block h-3 w-3 mr-1" />
                         Download FASTA
                       </button>
@@ -647,18 +780,34 @@ export default function ProteinViewWithId({ params }: ProteinPageParams) {
                 {/* Download section */}
                 <div className="mt-6 bg-white rounded-lg shadow-md p-4">
                   <h3 className="text-lg font-medium mb-3">Download Data</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <button className="flex items-center justify-center bg-blue-50 hover:bg-blue-100 text-blue-600 p-3 rounded border border-blue-200">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button
+                      className="flex items-center justify-center bg-blue-50 hover:bg-blue-100 text-blue-600 p-3 rounded border border-blue-200"
+                      onClick={handleDownloadPDB}
+                    >
                       <Download className="h-4 w-4 mr-2" />
                       PDB Structure
                     </button>
-                    <button className="flex items-center justify-center bg-blue-50 hover:bg-blue-100 text-blue-600 p-3 rounded border border-blue-200">
+                    <button
+                      className="flex items-center justify-center bg-blue-50 hover:bg-blue-100 text-blue-600 p-3 rounded border border-blue-200"
+                      onClick={handleDownloadFasta}
+                    >
                       <Download className="h-4 w-4 mr-2" />
                       Chain FASTA
                     </button>
-                    <button className="flex items-center justify-center bg-blue-50 hover:bg-blue-100 text-blue-600 p-3 rounded border border-blue-200">
+                    <button
+                      className="flex items-center justify-center bg-blue-50 hover:bg-blue-100 text-blue-600 p-3 rounded border border-blue-200"
+                      onClick={handleDownloadDomainJSON}
+                    >
                       <Download className="h-4 w-4 mr-2" />
                       Domain JSON
+                    </button>
+                    <button
+                      className="flex items-center justify-center bg-blue-50 hover:bg-blue-100 text-blue-600 p-3 rounded border border-blue-200"
+                      onClick={() => setShowCitationModal(true)}
+                    >
+                      <Share2 className="h-4 w-4 mr-2" />
+                      Citation
                     </button>
                   </div>
                 </div>
@@ -667,6 +816,93 @@ export default function ProteinViewWithId({ params }: ProteinPageParams) {
           </div>
         </section>
       </main>
+
+      {/* Citation Modal */}
+      {showCitationModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-2xl font-bold text-gray-900">Cite This Protein</h2>
+                <button
+                  onClick={() => setShowCitationModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {/* BibTeX */}
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-medium text-lg">BibTeX</h3>
+                    <button
+                      onClick={() => copyCitation('bibtex')}
+                      className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <pre className="bg-gray-50 p-4 rounded border text-xs overflow-x-auto">
+                    {generateCitation('bibtex')}
+                  </pre>
+                </div>
+
+                {/* APA */}
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-medium text-lg">APA</h3>
+                    <button
+                      onClick={() => copyCitation('apa')}
+                      className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded border text-sm">
+                    {generateCitation('apa')}
+                  </div>
+                </div>
+
+                {/* MLA */}
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-medium text-lg">MLA</h3>
+                    <button
+                      onClick={() => copyCitation('mla')}
+                      className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded border text-sm">
+                    {generateCitation('mla')}
+                  </div>
+                </div>
+
+                {/* Reference */}
+                <div className="border-t pt-4">
+                  <h3 className="font-medium text-sm text-gray-700 mb-2">Primary Citation</h3>
+                  <p className="text-xs text-gray-600">
+                    Cheng, H., Schaeffer, R. D., Liao, Y., Kinch, L. N., Pei, J., Shi, S., Kim, B.-H., & Grishin, N. V. (2014).
+                    <span className="italic"> ECOD: an evolutionary classification of protein domains.</span> PLoS Computational Biology, 10(12), e1003926.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setShowCitationModal(false)}
+                  className="bg-gray-200 text-gray-800 px-4 py-2 rounded hover:bg-gray-300"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <footer className="bg-gray-800 text-white py-6">
