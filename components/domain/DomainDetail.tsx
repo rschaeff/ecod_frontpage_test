@@ -90,6 +90,11 @@ interface DomainData {
   similar: SimilarDomain[];  // Similar domains
   pfam: PfamMapping[];    // Pfam mappings
   ligands: Ligand[];      // Bound ligands
+  drugbank?: {            // DrugBank data
+    accessions: string[];
+    links: string[];
+  };
+  comment?: string;       // Comments about the domain
 }
 
 interface DomainPageParams {
@@ -267,6 +272,7 @@ export default function DomainDetail({ params }: DomainPageParams) {
   const [highlightedPosition, setHighlightedPosition] = useState<number | null>(null);
   const [structureLoaded, setStructureLoaded] = useState<boolean>(false);
   const [structureError, setStructureError] = useState<string | null>(null);
+  const [showCitationModal, setShowCitationModal] = useState<boolean>(false);
   const [viewerOptions, setViewerOptions] = useState<ViewerOptions>(validateViewerOptions({
     style: 'cartoon',
     colorScheme: 'chain',
@@ -281,107 +287,124 @@ export default function DomainDetail({ params }: DomainPageParams) {
 
   // Fetch domain data based on ID
   useEffect(() => {
-    setLoading(true);
+    const fetchDomainData = async () => {
+      setLoading(true);
+      setError(null);
 
-    // In a real app, this would be an API call to fetch domain data
-    // For now, we simulate with a timeout and mock data
-    const timer = setTimeout(() => {
-      // Extract components from domain ID (format typically e[PDBID][Chain][Number], e.g., e4ubpA1)
-      const id = params.id;
-      let pdbId = '';
-      let chainId = '';
-      let domainNum = 1;
+      try {
+        // Call the real API endpoint
+        const response = await fetch(`/api/domains/${params.id}`);
 
-      if (id.startsWith('e') && id.length >= 6) {
-        pdbId = id.substring(1, 5);
-        chainId = id.substring(5, 6);
-        domainNum = parseInt(id.substring(6), 10) || 1;
-      }
+        if (!response.ok) {
+          if (response.status === 404) {
+            setError(`Domain ${params.id} not found`);
+          } else {
+            setError('Failed to load domain data');
+          }
+          setDomain(null);
+          setLoading(false);
+          return;
+        }
 
-      // Sample mock data
-      const mockData: DomainData = {
-        id: id,
-        pdbId: pdbId.toUpperCase(),
-        chainId: chainId,
-        domainNum: domainNum,
-        range: domainNum === 1 ? "159-252" : "253-339",
-        rangeStart: domainNum === 1 ? 159 : 253,
-        rangeEnd: domainNum === 1 ? 252 : 339,
-        sequence: domainNum === 1
-          ? "KFSVNQFCGVMNHDLNSKIILDRFSKEQSRLAARKYILGTTVKPHHRICQFKLGPKKFDENRNAVIPKSKIPEFLAQLTEDY"
-          : "GAVKEQVKHYSMGDITDVYVPKTVGKELNQYTPPVSQAEGLQSTETASGSVGNGQESEAG",
-        description: domainNum === 1
-          ? "TATA-binding protein, N-terminal domain"
-          : "TATA-binding protein, C-terminal domain",
-        classification: {
-          architecture: "Alpha proteins",
-          xgroup: {
-            id: "1.1",  // Fixed: removed X. prefix
-            name: "TBP-like"
-          },
-          hgroup: {
-            id: "1.1.1",  // Fixed: removed H. prefix
-            name: "TATA-binding protein-like"
-          },
-          tgroup: {
-            id: "1.1.1.1",  // Fixed: removed T. prefix
-            name: "TATA-binding protein"
-          },
-          fgroup: {
-            id: "1.1.1.1.1",  // Fixed: removed F. prefix
-            name: "TATA-box binding protein family"
-          }
-        },
-        protein: {
-          id: pdbId.toUpperCase(),
-          name: "TATA-box-binding protein",
-          uniprotId: "P20226",
-          organism: "Homo sapiens",
-          length: 339,
-          resolution: "2.1Å",
-          method: "X-ray diffraction"
-        },
-        representativeFor: domainNum === 1 ? "1.1.1.1.1" : null,  // Fixed: use empty string instead of null
-        similar: [
-          {
-            id: domainNum === 1 ? "e1cdcA1" : "e1cdcA2",
-            similarity: 78,
-            description: "TATA-binding protein from S. cerevisiae"
-          },
-          {
-            id: domainNum === 1 ? "e1mp9A1" : "e1mp9A2",
-            similarity: 65,
-            description: "TATA-binding protein from A. thaliana"
-          }
-        ],
-        pfam: [
-          {
-            id: "PF00352",
-            name: "TBP",
-            evalue: 1.2e-45
-          }
-        ],
-        ligands: domainNum === 1 ? [
-          {
-            id: "DNA",
-            name: "DNA fragment",
-            count: 1
-          }
-        ] : []
-      };
+        const apiData = await response.json();
 
-      if (id) {
-        setDomain(mockData);
+        // Extract components from domain ID (format: e[PDBID][Chain][Number], e.g., e4ubpA1)
+        const id = params.id;
+        let pdbId = '';
+        let chainId = '';
+        let domainNum = 1;
+
+        if (id.startsWith('e') && id.length >= 6) {
+          pdbId = id.substring(1, 5);
+          chainId = id.substring(5, 6);
+          domainNum = parseInt(id.substring(6), 10) || 1;
+        }
+
+        // Parse range to get start/end positions
+        let rangeStart = 0;
+        let rangeEnd = 0;
+        if (apiData.range) {
+          const rangeParts = apiData.range.split('-');
+          if (rangeParts.length === 2) {
+            rangeStart = parseInt(rangeParts[0], 10) || 0;
+            rangeEnd = parseInt(rangeParts[1], 10) || 0;
+          }
+        }
+
+        // Get architecture name from xgroup (architecture is the first level)
+        const architectureName = apiData.classification?.xgroup?.name?.split('.')[0] || 'Unknown';
+
+        // Transform API response to component's expected format
+        const domainData: DomainData = {
+          id: apiData.id,
+          pdbId: pdbId.toUpperCase(),
+          chainId: chainId,
+          domainNum: domainNum,
+          range: apiData.range || '',
+          rangeStart: rangeStart,
+          rangeEnd: rangeEnd,
+          sequence: apiData.sequence || '',
+          description: apiData.classification?.fgroup?.name || 'Domain',
+          classification: {
+            architecture: architectureName,
+            xgroup: {
+              id: apiData.classification?.xgroup?.id || '',
+              name: apiData.classification?.xgroup?.name || ''
+            },
+            hgroup: {
+              id: apiData.classification?.hgroup?.id || '',
+              name: apiData.classification?.hgroup?.name || ''
+            },
+            tgroup: {
+              id: apiData.classification?.tgroup?.id || '',
+              name: apiData.classification?.tgroup?.name || ''
+            },
+            fgroup: {
+              id: apiData.classification?.fgroup?.id || '',
+              name: apiData.classification?.fgroup?.name || ''
+            }
+          },
+          protein: {
+            id: apiData.pdb?.id || pdbId.toUpperCase(),
+            name: apiData.uniprot?.name || apiData.uniprot?.gene_name || 'Unknown protein',
+            uniprotId: apiData.uniprot?.accession || '',
+            organism: apiData.uniprot?.full_name || 'Unknown organism',
+            length: 0, // Not available in current API
+            resolution: 'N/A', // Not available in current API
+            method: 'Unknown' // Not available in current API
+          },
+          representativeFor: apiData.is_manual ? apiData.classification?.fgroup?.id : null,
+          // These fields are not yet available from the API
+          similar: [],
+          pfam: apiData.classification?.fgroup?.pfam_acc ? [
+            {
+              id: apiData.classification.fgroup.pfam_acc,
+              name: apiData.classification.fgroup.pfam_acc,
+              evalue: 0
+            }
+          ] : [],
+          ligands: [],
+          // DrugBank data
+          drugbank: apiData.drugbank && (apiData.drugbank.accessions?.length > 0 || apiData.drugbank.links?.length > 0) ? {
+            accessions: apiData.drugbank.accessions || [],
+            links: apiData.drugbank.links || []
+          } : undefined,
+          // Comments
+          comment: apiData.comment || undefined
+        };
+
+        setDomain(domainData);
         setError(null);
-      } else {
-        setError("Invalid domain ID");
+      } catch (err) {
+        console.error('Error fetching domain data:', err);
+        setError('Failed to load domain data');
         setDomain(null);
+      } finally {
+        setLoading(false);
       }
+    };
 
-      setLoading(false);
-    }, 1000);
-
-    return () => clearTimeout(timer);
+    fetchDomainData();
   }, [params.id]);
 
   // Handle structure loading completion
@@ -403,9 +426,12 @@ export default function DomainDetail({ params }: DomainPageParams) {
     setHighlightedPosition(position);
 
     // Highlight the residue in the structure viewer if it's available
-    if (structureViewerRef.current && structureViewerRef.current.current) {
-      // You could implement residue highlighting here
-      console.log('Highlighting residue at position:', position);
+    if (structureViewerRef.current) {
+      try {
+        structureViewerRef.current.highlightResidue(position);
+      } catch (error) {
+        console.error('Error highlighting residue:', error);
+      }
     }
   };
 
@@ -420,6 +446,95 @@ export default function DomainDetail({ params }: DomainPageParams) {
   // Reset viewer options to defaults
   const resetViewerOptions = () => {
     setViewerOptions(defaultViewerOptions);
+  };
+
+  // Download FASTA sequence
+  const handleDownloadFasta = async () => {
+    if (!domain) return;
+
+    try {
+      const response = await fetch(`/api/sequences/${domain.id}?format=fasta`);
+      if (!response.ok) {
+        console.error('Failed to download FASTA');
+        return;
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${domain.id}.fasta`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Error downloading FASTA:', error);
+    }
+  };
+
+  // Download PDB structure
+  const handleDownloadPDB = async () => {
+    if (!domain) return;
+
+    try {
+      const response = await fetch(`/api/structures/${domain.id}`);
+      if (!response.ok) {
+        console.error('Failed to download PDB structure');
+        return;
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${domain.pdbId}_${domain.chainId}.pdb`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Error downloading PDB structure:', error);
+    }
+  };
+
+  // Generate citation text
+  const generateCitation = (format: 'bibtex' | 'apa' | 'mla') => {
+    if (!domain) return '';
+
+    const year = new Date().getFullYear();
+    const url = `https://prodata.swmed.edu/ecod/complete/domain/${domain.id}`;
+
+    switch (format) {
+      case 'bibtex':
+        return `@misc{ecod_${domain.id},
+  title = {ECOD Domain ${domain.id}: ${domain.description}},
+  author = {ECOD Consortium},
+  year = {${year}},
+  howpublished = {\\url{${url}}},
+  note = {Evolutionary Classification of Protein Domains}
+}`;
+
+      case 'apa':
+        return `ECOD Consortium. (${year}). ECOD Domain ${domain.id}: ${domain.description}. Retrieved from ${url}`;
+
+      case 'mla':
+        return `ECOD Consortium. "ECOD Domain ${domain.id}: ${domain.description}." ECOD Database, ${year}, ${url}.`;
+
+      default:
+        return '';
+    }
+  };
+
+  // Copy citation to clipboard
+  const copyCitation = async (format: 'bibtex' | 'apa' | 'mla') => {
+    const citation = generateCitation(format);
+    try {
+      await navigator.clipboard.writeText(citation);
+      alert(`${format.toUpperCase()} citation copied to clipboard!`);
+    } catch (error) {
+      console.error('Failed to copy citation:', error);
+    }
   };
 
   // Create breadcrumb items
@@ -597,42 +712,96 @@ export default function DomainDetail({ params }: DomainPageParams) {
                     </select>
                   </div>
 
-                  <div className="flex items-center">
-                    <input
-                      type="checkbox"
-                      id="showSideChains"
-                      checked={viewerOptions.showSideChains || false}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateViewerOptions({ showSideChains: e.target.checked })}
-                      className="mr-2"
-                    />
-                    <label htmlFor="showSideChains" className="text-sm text-gray-700">Show Side Chains</label>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Color Scheme</label>
+                    <select
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                      value={viewerOptions.colorScheme || 'chain'}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => updateViewerOptions({ colorScheme: e.target.value as ViewerOptions['colorScheme'] })}
+                    >
+                      <option value="chain">Chain</option>
+                      <option value="residue">Residue Type</option>
+                      <option value="secondary">Secondary Structure</option>
+                      <option value="bfactor">B-Factor</option>
+                      <option value="spectrum">Spectrum</option>
+                    </select>
                   </div>
 
-                  <div className="flex items-center">
-                    <input
-                      type="checkbox"
-                      id="showLigands"
-                      checked={viewerOptions.showLigands || false}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateViewerOptions({ showLigands: e.target.checked })}
-                      className="mr-2"
-                    />
-                    <label htmlFor="showLigands" className="text-sm text-gray-700">Show Ligands</label>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Quality</label>
+                    <select
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                      value={viewerOptions.quality || 'medium'}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => updateViewerOptions({ quality: e.target.value as ViewerOptions['quality'] })}
+                    >
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                    </select>
                   </div>
 
-                  <div className="flex items-center">
-                    <input
-                      type="checkbox"
-                      id="showWater"
-                      checked={viewerOptions.showWater || false}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateViewerOptions({ showWater: e.target.checked })}
-                      className="mr-2"
-                    />
-                    <label htmlFor="showWater" className="text-sm text-gray-700">Show Water</label>
+                  <div className="border-t pt-3">
+                    <h4 className="text-xs font-medium text-gray-600 mb-2">Display Options</h4>
+
+                    <div className="flex items-center mb-2">
+                      <input
+                        type="checkbox"
+                        id="showSideChains"
+                        checked={viewerOptions.showSideChains || false}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateViewerOptions({ showSideChains: e.target.checked })}
+                        className="mr-2"
+                      />
+                      <label htmlFor="showSideChains" className="text-sm text-gray-700">Show Side Chains</label>
+                    </div>
+
+                    <div className="flex items-center mb-2">
+                      <input
+                        type="checkbox"
+                        id="showLigands"
+                        checked={viewerOptions.showLigands || false}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateViewerOptions({ showLigands: e.target.checked })}
+                        className="mr-2"
+                      />
+                      <label htmlFor="showLigands" className="text-sm text-gray-700">Show Ligands</label>
+                    </div>
+
+                    <div className="flex items-center mb-2">
+                      <input
+                        type="checkbox"
+                        id="showWater"
+                        checked={viewerOptions.showWater || false}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateViewerOptions({ showWater: e.target.checked })}
+                        className="mr-2"
+                      />
+                      <label htmlFor="showWater" className="text-sm text-gray-700">Show Water</label>
+                    </div>
+
+                    <div className="flex items-center mb-2">
+                      <input
+                        type="checkbox"
+                        id="showLabels"
+                        checked={viewerOptions.showLabels || false}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateViewerOptions({ showLabels: e.target.checked })}
+                        className="mr-2"
+                      />
+                      <label htmlFor="showLabels" className="text-sm text-gray-700">Show Labels</label>
+                    </div>
+
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        id="showHydrogens"
+                        checked={viewerOptions.showHydrogens || false}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateViewerOptions({ showHydrogens: e.target.checked })}
+                        className="mr-2"
+                      />
+                      <label htmlFor="showHydrogens" className="text-sm text-gray-700">Show Hydrogens</label>
+                    </div>
                   </div>
 
                   <button
                     onClick={resetViewerOptions}
-                    className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded text-sm transition-colors"
+                    className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded text-sm transition-colors mt-3"
                   >
                     Reset to Defaults
                   </button>
@@ -709,7 +878,7 @@ export default function DomainDetail({ params }: DomainPageParams) {
 
               {/* Pfam Mappings */}
               {domain.pfam.length > 0 && (
-                <div className="bg-white rounded-lg shadow-md p-4">
+                <div className="bg-white rounded-lg shadow-md p-4 mb-6">
                   <h3 className="font-medium mb-3">Pfam Mappings</h3>
                   <div className="space-y-2">
                     {domain.pfam.map(pfam => (
@@ -731,6 +900,38 @@ export default function DomainDetail({ params }: DomainPageParams) {
                       </a>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* DrugBank Information */}
+              {domain.drugbank && domain.drugbank.accessions.length > 0 && (
+                <div className="bg-white rounded-lg shadow-md p-4 mb-6">
+                  <h3 className="font-medium mb-3">DrugBank</h3>
+                  <div className="space-y-2">
+                    {domain.drugbank.accessions.map((accession, index) => (
+                      <a
+                        key={accession}
+                        href={domain.drugbank!.links[index] || `https://go.drugbank.com/drugs/${accession}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center p-2 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded"
+                      >
+                        <div className="flex-1">
+                          <div className="font-medium text-orange-800">{accession}</div>
+                          <div className="text-xs text-orange-700">Drug interaction target</div>
+                        </div>
+                        <ExternalLink className="h-4 w-4 ml-2 text-orange-600" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Comments */}
+              {domain.comment && (
+                <div className="bg-white rounded-lg shadow-md p-4">
+                  <h3 className="font-medium mb-3">Comments</h3>
+                  <p className="text-sm text-gray-700 leading-relaxed">{domain.comment}</p>
                 </div>
               )}
             </div>
@@ -853,12 +1054,24 @@ export default function DomainDetail({ params }: DomainPageParams) {
                   <div className="flex items-center">
                     <button
                       className="bg-blue-50 hover:bg-blue-100 text-blue-600 px-3 py-1 rounded text-sm mr-2 border border-blue-200 flex items-center"
-                      onClick={() => setHighlightedPosition(null)}
+                      onClick={() => {
+                        setHighlightedPosition(null);
+                        if (structureViewerRef.current) {
+                          try {
+                            structureViewerRef.current.clearHighlight();
+                          } catch (error) {
+                            console.error('Error clearing highlight:', error);
+                          }
+                        }
+                      }}
                     >
                       <Eye className="h-4 w-4 mr-1" />
                       Clear selection
                     </button>
-                    <button className="bg-blue-50 hover:bg-blue-100 text-blue-600 px-3 py-1 rounded text-sm border border-blue-200">
+                    <button
+                      className="bg-blue-50 hover:bg-blue-100 text-blue-600 px-3 py-1 rounded text-sm border border-blue-200 flex items-center"
+                      onClick={handleDownloadFasta}
+                    >
                       <Download className="inline-block h-4 w-4 mr-1" />
                       FASTA
                     </button>
@@ -964,17 +1177,26 @@ export default function DomainDetail({ params }: DomainPageParams) {
               <div className="mt-6 bg-white rounded-lg shadow-md p-4">
                 <h3 className="text-lg font-medium mb-3">Download & Export</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <button className="flex items-center justify-center bg-blue-50 hover:bg-blue-100 text-blue-600 p-3 rounded border border-blue-200">
+                  <button
+                    className="flex items-center justify-center bg-blue-50 hover:bg-blue-100 text-blue-600 p-3 rounded border border-blue-200"
+                    onClick={handleDownloadPDB}
+                  >
                     <Download className="h-4 w-4 mr-2" />
                     PDB Structure
                   </button>
 
-                  <button className="flex items-center justify-center bg-blue-50 hover:bg-blue-100 text-blue-600 p-3 rounded border border-blue-200">
+                  <button
+                    className="flex items-center justify-center bg-blue-50 hover:bg-blue-100 text-blue-600 p-3 rounded border border-blue-200"
+                    onClick={handleDownloadFasta}
+                  >
                     <Download className="h-4 w-4 mr-2" />
                     FASTA Sequence
                   </button>
 
-                  <button className="flex items-center justify-center bg-blue-50 hover:bg-blue-100 text-blue-600 p-3 rounded border border-blue-200">
+                  <button
+                    className="flex items-center justify-center bg-blue-50 hover:bg-blue-100 text-blue-600 p-3 rounded border border-blue-200"
+                    onClick={() => setShowCitationModal(true)}
+                  >
                     <Share2 className="h-4 w-4 mr-2" />
                     Citation
                   </button>
@@ -984,6 +1206,93 @@ export default function DomainDetail({ params }: DomainPageParams) {
           </div>
         </div>
       </section>
+
+      {/* Citation Modal */}
+      {showCitationModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-2xl font-bold text-gray-900">Cite This Domain</h2>
+                <button
+                  onClick={() => setShowCitationModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {/* BibTeX */}
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-medium text-lg">BibTeX</h3>
+                    <button
+                      onClick={() => copyCitation('bibtex')}
+                      className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <pre className="bg-gray-50 p-4 rounded border text-xs overflow-x-auto">
+                    {generateCitation('bibtex')}
+                  </pre>
+                </div>
+
+                {/* APA */}
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-medium text-lg">APA</h3>
+                    <button
+                      onClick={() => copyCitation('apa')}
+                      className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded border text-sm">
+                    {generateCitation('apa')}
+                  </div>
+                </div>
+
+                {/* MLA */}
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-medium text-lg">MLA</h3>
+                    <button
+                      onClick={() => copyCitation('mla')}
+                      className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded border text-sm">
+                    {generateCitation('mla')}
+                  </div>
+                </div>
+
+                {/* Reference */}
+                <div className="border-t pt-4">
+                  <h3 className="font-medium text-sm text-gray-700 mb-2">Primary Citation</h3>
+                  <p className="text-xs text-gray-600">
+                    Cheng, H., Schaeffer, R. D., Liao, Y., Kinch, L. N., Pei, J., Shi, S., Kim, B.-H., & Grishin, N. V. (2014).
+                    <span className="italic"> ECOD: an evolutionary classification of protein domains.</span> PLoS Computational Biology, 10(12), e1003926.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setShowCitationModal(false)}
+                  className="bg-gray-200 text-gray-800 px-4 py-2 rounded hover:bg-gray-300"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </AppLayout>
   );
 }

@@ -617,6 +617,65 @@ const ThreeDMolViewer = forwardRef<ViewerMethods, ThreeDMolViewerProps>(({
           debugLog('Error zooming out:', error);
         }
       }
+    },
+    highlightResidue: (residueNumber: number) => {
+      if (!viewerRef.current || !structureInfoRef.current) return;
+
+      const targetChain = structureInfoRef.current.actualChain;
+
+      try {
+        // Clear any previous labels
+        viewerRef.current.removeAllLabels();
+
+        // Reapply domain styling to reset any previous highlights
+        applyDomainStyling(viewerRef.current);
+
+        // Highlight the specific residue with a bright color and sphere representation
+        const selection = {
+          chain: targetChain,
+          resi: residueNumber
+        };
+
+        // Add sphere representation for the residue
+        viewerRef.current.addStyle(selection, {
+          sphere: {
+            color: 'yellow',
+            radius: 1.5
+          }
+        });
+
+        // Add label for the residue
+        viewerRef.current.addLabel(
+          `Residue ${residueNumber}`,
+          {
+            position: selection,
+            backgroundColor: 'black',
+            backgroundOpacity: 0.8,
+            fontColor: 'white',
+            fontSize: 12
+          }
+        );
+
+        // Zoom to the residue
+        viewerRef.current.zoomTo(selection, 500);
+        viewerRef.current.render();
+      } catch (error) {
+        debugLog('Error highlighting residue:', error);
+      }
+    },
+    clearHighlight: () => {
+      if (!viewerRef.current) return;
+
+      try {
+        // Remove all labels
+        viewerRef.current.removeAllLabels();
+
+        // Reapply domain styling to clear highlights
+        applyDomainStyling(viewerRef.current);
+        viewerRef.current.render();
+      } catch (error) {
+        debugLog('Error clearing highlight:', error);
+      }
     }
   }));
 
