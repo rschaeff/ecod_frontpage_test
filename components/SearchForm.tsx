@@ -43,8 +43,9 @@ const DEFAULT_EXAMPLES = [
 
 /**
  * Inner component that implements the search form functionality
+ * Can be used directly when already inside a SearchProvider
  */
-function SearchFormInner({
+export function SearchFormInner({
   className = '',
   defaultQuery = '',
   placeholder = 'Search by keyword, PDB ID, UniProt ID, or domain ID...',
